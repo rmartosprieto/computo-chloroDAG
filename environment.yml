@@ -4,4 +4,7 @@ channels:
 dependencies:
   - jupyter
   - matplotlib
+  - seaborn
   - numpy
+  - pandas
+  - networkx
