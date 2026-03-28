@@ -10,7 +10,8 @@ _{{< meta description >}}_
 ### Authors
 
 - [{{< meta by-author.1.name.literal >}}]({{< meta by-author.1.url >}}) ({{< meta by-affiliation.1.name >}})
-- [{{< meta by-author.2.name.literal >}}]({{< meta by-author.2.url >}}) ({{< meta by-affiliation.2.name >}})
+- [{{< meta by-author.2.name.literal >}}]({{< meta by-author.2.url >}}) ({{< meta by-affiliation.1.name >}})
+- [{{< meta by-author.3.name.literal >}}]({{< meta by-author.3.url >}}) ({{< meta by-affiliation.2.name >}})
 
 ### Abstract
 

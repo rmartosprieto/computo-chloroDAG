@@ -1,0 +1,59 @@
+,Cause (X),Outcome (Y),Total Effect (TE),Refutation TE_DataSubset,Refutation TE_RandCommCause,Refutation TE_Placebo
+0,ndhB_96579,ndhB_96698,0.5996480167095457,NA,NA,NA
+1,ndhB_95644,ndhB_95650,0.4125249343832218,NA,NA,NA
+2,ndhB_96698,ndhB_97016,0.24357479768472667,NA,NA,NA
+3,ndhB_96579,ndhB_97016,0.26204865878895056,"Refute: Use a subset of data
+Estimated effect:0.26204865878895056
+New effect:0.2620487190261912
+p value:0.88
+","Refute: Add a random common cause
+Estimated effect:0.26204865878895056
+New effect:0.26205546333268015
+p value:0.8600000000000001
+","Refute: Use a Placebo Treatment
+Estimated effect:0.26204865878895056
+New effect:0.0001406079493220025
+p value:0.94
+"
+4,ndhB_97016,ndhB_94622,0.06297918948521182,NA,NA,NA
+5,ndhB_96579,ndhB_94622,0.06449803701626534,"Refute: Use a subset of data
+Estimated effect:0.06449803701626534
+New effect:0.06460036901813888
+p value:0.94
+","Refute: Add a random common cause
+Estimated effect:0.06449803701626534
+New effect:0.06450657655152008
+p value:1.0
+","Refute: Use a Placebo Treatment
+Estimated effect:0.06449803701626534
+New effect:0.000143861162791444
+p value:0.94
+"
+6,ndhB_96698,ndhB_94622,0.028279226423153656,"Refute: Use a subset of data
+Estimated effect:0.028279226423153656
+New effect:0.028540694085208384
+p value:0.86
+","Refute: Add a random common cause
+Estimated effect:0.028279226423153656
+New effect:0.02832937131658457
+p value:0.96
+","Refute: Use a Placebo Treatment
+Estimated effect:0.028279226423153656
+New effect:0.0007563182201789348
+p value:0.9199999999999999
+"
+7,ndhB_96579,ndhB_96457,0.004071015529812299,"Refute: Use a subset of data
+Estimated effect:0.004071015529812299
+New effect:0.004431789540066835
+p value:0.86
+","Refute: Add a random common cause
+Estimated effect:0.004071015529812299
+New effect:0.003999076570104715
+p value:0.78
+","Refute: Use a Placebo Treatment
+Estimated effect:0.004071015529812299
+New effect:-0.0003475654725548086
+p value:0.88
+"
+8,ndhB_97016,ndhB_96457,0.007659529775390224,NA,NA,NA
+9,ndhB_97016,ndhB_96439,0.0012170849524058662,NA,NA,NA

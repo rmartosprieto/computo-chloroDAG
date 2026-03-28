@@ -1,0 +1,6 @@
+;Model;No. perm. in MEC;No. violated LMCs;Performance: better than…;Falsifiable;Falsified;DAG rejected?
+0;Reference;0/20;41/97;100;T;F;No
+1;HC;0/20;53/98;100;T;F;No
+2;PC;0/20;73/120;90;T;T;Yes
+3;LiNGAM;0/20;48/95;100;T;F;No
+;NOTEARS;0/20;73/115;45;T;T;Yes

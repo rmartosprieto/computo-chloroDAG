@@ -1,0 +1,1715 @@
+# Introduction {#sec-intro}
+
+Transcriptomic regulation in chloroplasts involves a cascade of maturation events—transcript initiation, processing, splicing, trimming, and decay—that unfold over time. Long‑read sequencing data now make it possible to observe these events in full transcripts, offering a unique opportunity to study their dependencies and to reconstruct their chronological and possibly causal relationships [@Long_Reads_GuilcherEtAl]. 
+
+Our main contribution in this paper is to provide a **causal inference framework** to order post‑transcriptional regulation events from long‑read sequencing data in *Arabidopsis thaliana*. In particular, we focus on the maturation of two chloroplast genes, *ndhB* and *ndhD*. These datasets provide rich ground for causal analysis: multiple post‑transcriptional events, block‑structured missing observations, and rare but biologically meaningful occurrences.
+
+The reference work of Guilcher *et al.* [@Long_Reads_GuilcherEtAl] proposed a chronological ordering based on a  deterministic principle: the more often a regulation event is observed alone, that is without others, the earlier it occured. We argue that this principle essentially assume that the sequence of regulation events is deterministic: a maturation event strictly depends on its predecessors: it is triggered by them and cannot occur otherwise. This does not align with the causal and probabilistic framework of Pearl, where rare events can still exert strong causal influence and probabilistically some events can still happen without their causal predecessors occurring. Consequently, our approach departs from frequency‑based ordering and instead builds on Bayesian networks and Pearl’s structural causal models.
+
+Our method proceeds in three stages:
+1. **Causal discovery**: learning a directed acyclic graph (DAG) over maturation events using HC, PC, LiNGAM, and NOTEARS, with a stability selection strategy for the $\ell_1$‑regularization parameter in NOTEARS.
+2. **Causal inference**: estimating causal effects via do‑calculus and counterfactual reasoning. Missing data are handled via an EM algorithm that jointly imputes missing values and estimates the Bayesian network.
+3. **Chronology construction**: translating estimated causal effects into maturation timeline models, yielding hypotheses about how perturbations (e.g., blocking a processing step) shift downstream events.
+
+We show that this causal‑chronology approach produces timelines that often differ substantially from the reference order in [@Long_Reads_GuilcherEtAl], and that it provides better fit, stability, and interpretability. Beyond improving chronology reconstruction, our framework allows “what if” questions and guides the design of targeted perturbation experiments in *Arabidopsis thaliana*.
+
+# Related work {#sec-related-work}
+
+## Classical Methods for Gene Regulatory Network Inference  
+
+Early computational approaches to gene regulatory network (GRN) inference relied heavily on classical statistical and machine learning techniques designed to extract dependencies from large-scale gene expression data. A widely used family of methods is based on *information theory*, particularly mutual information (MI), which quantifies statistical dependencies between gene expression profiles. Algorithms such as **ARACNE** (Algorithm for the Reconstruction of Accurate Cellular Networks) apply MI combined with the data processing inequality to prune indirect associations, thereby yielding clearer networks [@Margolin2006]. Extensions like **CLR** (Context Likelihood of Relatedness) [@Faith2007] and **MRNET** [@Meyer2008_minet] further refine this principle by contextualizing MI scores or reducing redundancy among inferred interactions.  
+
+Another influential line of work exploits *tree-based ensemble methods*, most notably **GENIE3**, which decomposes the problem into regression tasks where each gene’s expression is predicted from all others using Random Forests or Extra-Trees [@HuynhThu2010]. GENIE3 and its variants consistently rank highly in community benchmarks such as DREAM challenges, and they established machine learning as a reference framework for GRN inference. Complementary classical models include **Bayesian networks** [@Friedman2000], which encode conditional dependencies in a probabilistic graphical framework, and **structural equation models** (SEMs) [@Pearl2009], which leverage linear relations between variables while enforcing acyclicity constraints. These methods laid the groundwork for later developments in causal discovery and deep learning.  
+
+## Temporal Data and Dynamic GRN Inference  
+
+While static methods infer regulatory interactions from steady-state or aggregated expression measurements, many biological processes unfold dynamically. To capture this temporal dimension, classical extensions of GRN inference integrate *time-series data*. For example, **dynGENIE3** extends the Random Forest-based GENIE3 by embedding regulatory effects in *ordinary differential equations* (ODEs), enabling simultaneous modeling of steady-state and temporal expression patterns [@HuynhThuGeurts2018]. Other approaches utilize *dynamic Bayesian networks* (DBNs) [@Murphy2002DBN], which explicitly model temporal dependencies and can infer time-lagged interactions. Techniques such as **SINCERITIES** [@PapiliGao2018SINCERITIES] infers directed and signed gene‐regulatory edges by regressing each gene’s expression on candidate regulators across time‐stamped single‐cell data, incorporating statistical distances (e.g. Kolmogorov–Smirnov) between distributions at successive time points to capture dynamics. More recently **GRNBoost2** [@Moerman2019GRNBoost2]  applies efficient gradient boosting regressors, where regulator–target interactions are ranked via feature importance in boosted decision trees.
+
+
+These temporal frameworks are particularly relevant to the analysis of *full-length transcriptome datasets*, such as those generated by nanopore sequencing of plastid RNAs in *Arabidopsis thaliana* [@Guilcher2025]. In this setting, the order and co-occurrence of post-transcriptional maturation events are not merely static associations but dynamic processes unfolding over time.  This makes temporal GRN inference a crucial methodological bridge between raw sequencing data and interpretable models of chloroplast gene regulation.  
+
+
+## Causality and GRN Inference  
+
+A central limitation of both static and temporal GRN inference methods is that they often rely on correlations or statistical dependencies, which do not necessarily imply causation. To support biological interpretation and experimental design, it is essential not only to infer structure, but also to reason about what would happen under perturbations. Causal discovery provides a principled framework that integrates graphical models, do-calculus, and structural equation modeling, thereby enabling the formal characterization of interventions and counterfactual reasoning (i.e. what would expression look like if we force a regulator on or off) [@CausalityBook_Pearl]. For example, LiNGAM exploits non-Gaussianity to orient edges; PC and HC use conditional independence tests to recover causal structure; and NOTEARS [@DagsNotears] frames DAG learning as continuous optimization while preserving acyclicity, making it more amenable to counterfactual queries. These causal approaches provide a principled route beyond correlation-based GRNs—allowing not only inference of regulatory architecture, but simulation of interventions and estimation of causal effect—for instance, predicting how blocking or activating a transcript processing event may shift downstream maturation timelines, a perspective directly relevant in the full-length transcriptome context of *Arabidopsis thaliana*.
+
+
+
+
+
+# A Causal Perspective on Maturation Timelines {#sec-frameworks}
+
+## Dataset: Transcriptional Maturation Timelines in *Arabidopsis thaliana* {#sec-dataset}
+
+
+Our case study focuses on full-length transcriptome datasets describing the post-transcriptional maturation of two chloroplast genes in *Arabidopsis thaliana*, ***ndhB*** and ***ndhD*** @Long_Reads_GuilcherEtAl. Each dataset records for each sequencing read the presence or absence of specific maturation events, such as RNA editing or splicing, encoded as binary random variables ($1 =$ observed, $0 =$ not observed). Errors introduced by nanopore sequencing are treated as unobserved events and assigned the value $0$ during pre-processing. The *ndhB* dataset comprises 1 899 observations (or reads), of which only 117 are fully observed, and includes 12 distinct maturation events. Missing values are present in most reads and typically appear as contiguous blocks rather than isolated sites. In comparison, the *ndhD* dataset contains 7 752 observations with 930 fully observed, and involves 5 maturation events. Its missing values follow a similar block structure to those of *ndhB*. A glimpse of the untreated datasets is provided in [@tbl-glimpse_data].
+
+
+The distribution of missing values makes it impractical to restrict the joint analyses of all events to fully observed reads, as this would drastically reduce the sample size (to 117 for *ndhB* and 930 for *ndhD*).  
+Instead, imputation strategies are required to exploit the full dataset. Furthermore, the block-structured nature of missingness suggests systematic sequencing coverage gaps rather than random dropout, which must be considered when designing statistical models.
+
+
+These datasets provide a rich ground for causal discovery: the binary encoding of maturation events is well suited for Bayesian network learning, while the relatively high number of observations allows for robust estimation despite missing data.
+
+::: {#tbl-glimpse_data fig-pos="H" layout-nrow=2}
+```{python}
+#| label: tbl-glimpse_ndhB
+#| tbl-cap: "_ndhB_. The editing events are defined in terms of their genomic sites: ed1 = 94622, ed2 = 94999, ed3 = 95225, ed4 = 95608, ed5 = 95644, ed6 = 95650, ed7 = 96419, ed8 = 96439, ed9 = 96457, ed10 = 96579, ed11 = 96698, ed12 = 97016."
+#| echo: false
+#| message: false
+#| warning: false
+
+import pandas as pd
+
+data = pd.read_csv("Tables_Raw_Data/raw_ndhB.csv", sep=";")
+data.sample(n=5)
+```
+
+```{python}
+#| label: tbl-glimpse_ndhD
+#| tbl-cap: "_ndhD_. The editing events are defined in terms of their genomic sites: ed1 = 116281, ed2 = 116290, ed3 = 116494, ed4 = 116785, ed5 = 117166."
+#| echo: false
+#| message: false
+#| warning: false
+
+import pandas as pd
+
+data = pd.read_csv("Tables_Raw_Data/raw_ndhD.csv", sep=";")
+data.sample(n=5)
+```
+
+Untreated working datasets
+:::
+
+
+## From Frequency-Based to Causal Chronologies {#sec-paradigm-shift}
+
+The primary objective of this study is to infer a chronology of post-transcriptional maturation events for the *ndhB* and *ndhD* genes in *Arabidopsis thaliana*. A chronology here refers to a directed acyclic graph (DAG) where nodes represent maturation events and directed edges indicate temporal precedence (i.e. if there is an arrow from event $A$ to event $B$, then $A$ occurs before $B$ in the maturation timeline).
+
+The postulate that guides the argument in @Long_Reads_GuilcherEtAl for proposing a chronology of maturation events is the following: _the more often an event occurs (or is observed) without others, the sooner it is the maturation timeline_.
+
+Let us briefly summarize the pipeline elaborated in @Long_Reads_GuilcherEtAl to infer such a chronology starting from this assumption. According to the working dataset, the maturation events are viewed as random variables that can take binary values: $1$ if the event has been observed during the post-transcriptional maturation process, $0$ otherwise. 
+
+__Dependence discovery__. The first step consists in carrying out statistical pairwise dependence tests[^stat_dep_tests] in order to find out the actual dependencies between all possible couples of maturation events. In this step, we obtain an edge $A - B$ between two maturation events $A$ and $B$ if they are declared statisticaly dependent (adjusted p-value less than a pre-specified treshold). Note that by the end of this procedure  an undirected graph is obtained.
+
+[^stat_dep_tests]: _Exact Fisher tests_  (ommiting missing data), to be more precise.
+
+__Temporal order decision__. Next, in order to decide whether regulation $A$ occured before or after regulation $B$ in the maturation timeline, one has to decide the direction of the edge by defining an arrow. For this, one applies the postulate:
+
+\begin{align*}
+\text{If } \#\{(A=1, B=0)\} &> \#\{(A=0, B=1)\}\text{, then } A\rightarrow B.\\
+\text{If } \#\{(A=1, B=0)\} &< \#\{(A=0, B=1)\}\text{, then } A\leftarrow B.
+\end{align*}
+
+Note that by the end of this procedure  a directed graph without cycles (i.e. a _DAG_) is produced.
+
+__Chronology representation__. Finally, we must account for two particular situations. First, the analysis does not always yield a complete chronological order: ambiguities may arise when determining the temporal relationship between two events. In such cases, we consider these events to occur simultaneously. Second, some maturation events occur independently of all others. These are either excluded from the chronology or represented in the DAG as isolated nodes.
+
+
+By way of example, [@fig-ndhD-analysis] shows the complete analysis workflow for _ndhD_ obtained in [@Long_Reads_GuilcherEtAl]. [@fig-ndhD-analysis-a] displays the dependencies network between different maturation events, while [@fig-ndhD-analysis-b] presents the final maturation timeline in its DAG form.
+
+::: {#fig-ndhD-analysis fig-pos="H" layout="[[1,-0.3,1], [1,-0.3,1]]"}
+
+![Dependencies network](Figures_Reference_Graphs/depend_ndhD_Fig5.png){#fig-ndhD-analysis-a width=250 .lightbox}
+
+![Reference maturation chronology](Figures_Reference_Graphs/chron_ndhD_Fig6.png){#fig-ndhD-analysis-b width=250 .lightbox}
+
+Analysis of genetic regulation for _ndhD_ from @Long_Reads_GuilcherEtAl: (a) statistical dependencies between maturation events, and (b) resulting directed acyclic graph representing the maturation timeline based on frequency ordering.
+:::
+
+
+
+
+The previous conception is based on a determinist viewpoint, 
+ commonly shared in the biological community: _a maturation event strictly depends on its predecessors: it is triggered by them and cannot occur otherwise_. However, we know by now that the interactions between different maturation events can be much more complex and intricate than that (cf. [@Heterologous_SchmitzEtAl], [@LarchMito_MarechalEtAl]. [@ChloroCP31A_TillichEtAl], [@SiteSelective_KarcherBock], [@CisElements_TakenakaNeuwirtBrennicke]).
+
+In this sense, our approach represents a paradigm shift based on the following two objections to the deterministic postulate: _an event can have a strong causal effect even if it is rare_ and _probabilistically some events can still happen without their causal predecessors occurring_. Accordingly, a maturation event can appear on the top of the maturation timeline even if it is hardly observed alone (that is without other regulations). 
+
+A biological explanation for this phenomenon relates to the speed at which events occur. Assume for example, that event $A$ strongly or rapidly promotes event $B$, then $B$ will quickly follow $A$, so $A$ will rarely be observed alone. If we further assume that $B$ can occur (for some small probability) without $A$ and $B$ does not promote $A$, then $B$ will often be observed without $A$. In this scenario $A$ is the cause of $B$, yet using the deterministic viewpoint we would conclude otherwise.
+
+
+Such circumstances can indeed be observed within the working dataset. Namely, generating the frequency table of all five possible outcomes for *ndhD*, one can find instances of this phenomenon. Specifically, [@tbl-contigency_ed40_ed41] shows the contingency matrix for the pair of maturation events located at the genomic sites 116494 and 116785. Let $A:= \text{ndhD\_116494}$ and $B:= \text{ndhD\_116785}$. We observe that ndhD\_116494 appears much less frequently alone than ndhD\_116785. According to the deterministic postulate, this would suggest an arrow $\text{ndhD\_116785}\longrightarrow \text{ndhD\_116494}$, as shown in [@fig-ndhD-analysis-b]. However, the causal Hill-Climbing model (HC-model, @TeyssierKoller2005), for example, proposes the reverse direction, $\text{ndhD\_116494}\longrightarrow \text{ndhD\_116785}$, as seen in [@fig-causal_HCmodel_chron_ndhD][^Ex_arrow_causals].
+
+[^Ex_arrow_causals]: In fact, most of our causal models propose this arrow (see [@fig-cross_analysis_ndhD]).
+
+
+```{python}
+#| label: tbl-contigency_ed40_ed41
+#| tbl-cap: "Contingency matrix for the pair (ndhD_116494, ndhD_116785)"
+#| echo: false
+#| message: false
+#| warning: false
+
+import pandas as pd
+
+contingency = pd.DataFrame(
+    {"ndhD_116785 = 0": [82,39],
+    "ndhD_116785 = 1": [144, 304]},
+    index = ["ndhD_116494 = 0", "ndhD_116494 = 1"])
+
+contingency
+```
+
+
+As we will see in [@sec-chloro], some of the proposed models even yield a reversed chronology compared to the one proposed in [@Long_Reads_GuilcherEtAl]. The causal HC-model again serves as an example: the path $\text{ndhD\_116290}\longrightarrow\text{ndhD\_116494}\longrightarrow \text{ndhD\_116785}$ from [@fig-causal_HCmodel_chron_ndhD] reflects a reversed timeline relative to that proposed by the reference model in [@fig-ndhD-analysis-b].
+
+Moreover, the frequency table allows the following counts:
+
+- ndhD\_116290 appears $8$ times alone.
+- ndhD\_116290 appears $26$ times together with ndhD\_116494.
+- ndhD\_116290 appears $262$ times together with both ndhD\_116494 and ndhD\_116785.
+
+In other words, the event ndhD\_116290 strongly promotes ndhD\_116494, so it is rarely observed alone (and ndhD\_116494 is often observed without ndhD\_116290). Besides, we see an increasing number of co-occurrences with the subsequent events of the proposed timeline.
+
+![Causal HC-model for maturation chronology for _ndhD_](Figures_Causal_Chronology/chron_DAG_HC_ndhD.png){#fig-causal_HCmodel_chron_ndhD fig-pos="H" width=300 .lightbox}
+
+
+More formally, the deterministic postulate relies on a connection between the phenomenon $\Big(\text{$A$ is the cause of $B$}\Big)$ and the phenomenon $\Big(\text{$A$ is observed alone more often than $B$ alone}\Big)$. However, from a probabilistic point of view, it is clear that the second phenomenon does not allow to conclude any causal effect of $A$ on $B$. Therefore, our paradigm shift consists in adopting a probabilistic approach to the problem by directly computing $P(A\Rightarrow B)$. The mathematical framework for this is the causal inference theory in terms of _do-calculus_ developped by J. Pearl (cf. [@CausalityPaper_Pearl; @CausalityBook_Pearl]).
+
+::: {#def-CausalEffect}
+We say that $A$ has a causal effect on $B$ if $$P(B=1\ |\ \text{do($A=1$)}) > P(B=1\ |\ \text{do($A=0$)}).$$
+
+We put $P(A\Rightarrow B):= P(B=1\ |\ \text{do($A=1$)})$ and $P(\overline{A}\Rightarrow B):= P(B=1\ |\ \text{do($A=0$)})$.
+:::
+
+::: {#rem-chron_causality}
+It is apparent that there is a close relationship between _chronology_ and _causality_. Indeed, if $B$ occurs before $A$, then $A$ is definitely not a cause of $B$. In other words, causality entails a temporal order, hence a chronology.
+:::
+
+To conclude this section, we summarize the proposed pipeline within our probabilistic framework, which is implemented and illustrated in [@sec-chloro].
+
+1. __Causal discovery__. The first step is to infer a Directed Acyclic Graph (DAG) directly from the working dataset. We apply several well‑known methods: Hill Climbing (HC, @TeyssierKoller2005), Peter‑Clark (PC, @spirtes1993causation), LiNGAM @shimizu2006linear; and more recent continuous optimization variants such as NOTEARS @DagsNotears. This step involves both unconditional (statistical) dependence tests and conditional dependence tests, in order to establish directed edges between pairs of events in accordance with the observed data [^initial_DAG].
+
+[^initial_DAG]: This initial DAG contains a complex network of _all_ possible (directed) interdependencies between different events.
+
+2. __Causal inference__. The first step yields a directed edge between two events, say $A\rightarrow B$. This suggests that $A$ is a potential cause of $B$, though it may nevertheless happen that $B$ occurs without $A$. To decide whether $A$ is an actual cause of $B$, we perform a causal inference analysis: isolating the causal effect; identifying and adjusting for confounders; and, when possible, designing interventions or applying graphical criteria such as the _backdoor criterion_ to ensure that any spurious associations are removed.
+
+
+
+3. __Chronology representation__. Finally, we construct the _maximal causality path_ based on the previous analysis. More precisely, among all causal effects, we retain only those with the highest impact, respecting the topological order of the initial DAG obtained in the first step. By the end of this procedure one obtains a tree (as a sub-DAG of the discovered DAG in the first step) representing the chronology between the maturation events[^causal_DAG].
+
+[^causal_DAG]: This tree reflects, by construction, the _relevant_ (directed) interdependence network between different events. In this sense, it represents the _actual_ causal structure underlying the initial DAG according to the _causal minimality principle_ (cf. [@CausalityBook_Pearl]).
+
+
+
+
+# Inferring Causal Maturation Timelines in Arabidopsis thaliana via Bayesian Gene‑Regulation Models {#sec-chloro}
+
+In this section, we apply the full causal inference pipeline described earlier to the post-transcriptional maturation of two chloroplast genes in *Arabidopsis thaliana*: ***ndhB*** and ***ndhD***. These genes provide an ideal testing ground for our methodology: they involve multiple sequential maturation events—such as splicing and editing—captured in binary form from full-length transcriptomic nanopore reads, and exhibit block-structured missing data. Our goal is to infer robust and interpretable causal chronologies of these events, going beyond mere co-occurrence or frequency-based assumptions. Starting from imputed datasets, we learn causal structures using HC, PC, LiNGAM, and NOTEARS, estimate causal effects using do-calculus, and construct timeline DAGs that reflect high-impact, directed causal relationships between maturation events. The NOTEARS algorithm was adapted via a two-level stability selection strategy to enhance robustness in the discovery of causal structures; see Appendix @sec-notears for details.
+
+
+
+## Imputation through Bayesian network discovery {#sec-imputation}
+
+An important limitation of the datasets used to study gene regulation in *Arabidopsis thaliana* is the significant presence of missing values. The distribution of these missing entries makes it impractical to restrict the dataset to fully observed rows, as this would drastically reduce the number of usable observations. This issue also affects the first step of our pipeline--***Causal discovery***--. As a result, we must perform imputation jointly with the learning of the corresponding Bayesian network.
+
+To handle the full dataset, our strategy for missing data involves two stages of imputation: 1. ***Initial imputation***, and 2. ***Graphical model imputation***. Implementation details and configuration settings are available in a [GitHub repository](https://github.com/rmartosprieto/chloroDAG.git).
+
+1. __Initial imputation__. First, we perform a preliminary imputaton of missing values in order to have a complete dataset as a starting point for learning the Bayesian Network (via the selected causal discovery algorithm). Technically, the initial imputation is carried out using the `IterativeImputer` class from the `scikit-learn` Python library (cf. [@scikit-learnLibrary]). This method models each feature with missing values as a function of other features, using those estimates for imputation in a round-robin fashion. At each step, one feature (i.e. column) is treated as the target and the others as predictors.
+
+2. __Graphical model imputation__. Next, we apply an _Expectation-Maximization_ (EM) algorithm to jointly refine the imputed values and the Bayesian Network. The EM algorithm alternates between two steps:
+
+    - **E-step (Expectation):** Missing values are imputed using the current Bayesian Network. For each missing value:
+        - The parents of the variable in the current DAG are identified.
+        - The corresponding Conditional Probability Distribution (CPD) is used to compute the most likely value for the missing entry, given its parents' values.
+        - The dataset is updated by replacing the missing value with this most probable estimate.
+
+    - **M-step (Maximization):** A new Bayesian Network is learned from the updated dataset using the selected causal discovery algorithm (HC, PC, LiNGAM, or NOTEARS). This includes:
+        - Re-learning the DAG structure from the completed data.
+        - Re-estimating the CPDs.
+
+These steps are repeated iteratively until convergence, defined as the point where the proportion of changed directed edges between iterations falls below 1%.
+
+::: {#rem-init_imp}
+Numerical experiments with our gene regulation datasets have shown that the choice of initial imputation method does not significantly affect the resulting graphical model. For example, a simple _mode_ imputation yields the same final network.
+:::
+
+::: {#rem-Belief_Prop}
+The ***Graphical model imputation*** method described above converges rapidly. In fact, in our experiments, the network stabilizes by the second iteration. One possible explanation for this efficiency lies in the way missing values are updated: when a variable with missing data is identified, the marginal probabilities required for its update are computed using the values obtained from the initial imputation. That is, even if some parent variables also had missing values originally, they are treated as observed, based on the initial imputation.
+
+A more principled approach would involve applying a *Belief Propagation* algorithm (cf. [@IntelligentSystemsBook_Pearl], [@LoopyBP]) in step (iv.c) to account for the uncertainty in the imputed parent values. However, our experiments indicate that this variant is significantly slower and does not lead to any substantial refinement of the resulting Bayesian network. In practice, the final graph is effectively the same as the one obtained directly from the initial imputation, without applying any further iterative refinement steps. One potential reason for this behavior is that the *Belief Propagation*-based version of the imputation process imposes, by construction, rigid structural constraints on the DAG, which in turn limits the ability of the EM algorithm to refine the network structure.
+:::
+
+
+In our case study, we focus on datasets that describe the genetic regulation of the *ndhB* and *ndhD* genes located in the chloroplast of *Arabidopsis thaliana*. We provide a brief description of the datasets used and the distribution of missing (`nan`) values.
+
+Maturation events are modeled as binary random variables: $1$ if observed during post-transcriptional maturation, $0$ otherwise. Errors introduced by the nanopore sequencing technology used in @Long_Reads_GuilcherEtAl are treated as unobserved events and assigned a value of $0$ during initial pre-processing—an approach consistent with the binary encoding.
+
+### *ndhB* dataset {.unnumbered .unlisted}
+
+- **No. observations**: $1899$ including $117$ fully observed.
+- **No. maturation events**: $12$ whose sites are $94622$, $94999$, $95225$, $95608$, $95644$, $95650$, $96419$, $96439$, $96457$, $96579$, $96698$, $97016$.
+- **Distribution of `nan` values**. Each observation contains a *unique* block with consecutive reads, i.e. there is no isolated reads in the genomic region between `nan` values. [@fig-ndhB_nan_distr] shows a visualisation of the distribution of the values of the *ndhB* dataset before the imputation process described previously.
+
+![Distribution of values for *ndhB* before imputation: $\color{blue!75!cyan!75!black}{\blacksquare}$ $=$ value $0$, $\color{blue!30!cyan!70!teal!95!black}{\blacksquare}$ $=$ value $1$, $\color{teal!20!lightgray!95!cyan}{\blacksquare}$ $=$ value `nan`](Figures_NaN_distributions/ndhB_visu_sorted.png){#fig-ndhB_nan_distr fig-pos="H" width=300}
+
+
+### *ndhD* dataset {.unnumbered .unlisted}
+
+- **No. observations**: $7752$ including $930$ fully observed.
+- **No. maturation events**: $5$ whose sites are $116281$, $116290$, $116494$, $116785$, $117166$.
+- **Distribution of `nan` values**. Each observation contains a *unique* block with consecutive reads, i.e. there is no isolated reads in the genomic region between `nan` values. [@fig-ndhD_nan_distr] shows a visualisation of the distribution of the values of the *ndhD* dataset before the imputation process described previously.
+
+![Distribution of values for *ndhD* before imputation: $\color{blue!75!cyan!75!black}{\blacksquare}$ $=$ value $0$, $\color{blue!30!cyan!70!teal!95!black}{\blacksquare}$ $=$ value $1$, $\color{teal!20!lightgray!95!cyan}{\blacksquare}$ $=$ value `nan`](Figures_NaN_distributions/ndhD_visu_sorted.png){#fig-ndhD_nan_distr fig-pos="H" width=150}
+
+
+
+
+
+
+## Causal inference {#sec-quantitative-causality}
+
+In this section, we detail the implementation of our probabilistic approach applied to the _ndhB_ and _ndhD_ genes of the chloroplast of _Arabidopsis thaliana_.
+
+The first step in our pipeline is ***Causal discovery***. The graphs in [@fig-CD_ndhB] and [@fig-CD_ndhD] represent the discovered DAGs from the working datasets (i.e. after the imputation process described in [@sec-imputation]), obtained using the HC, PC, LiNGAM, and NOTEARS algorithms. The HC and PC algorithms are implemented via the `pgmpy` Python package (cf. [@pgmpyLibrary]), while LiNGAM is implemented using the `causal-learn` package (cf. [@CausalLearnLibrary]). Implementation details and configuration settings are available at our [GitHub repository](https://github.com/rmartosprieto/chloroDAG.git).
+
+::: {#fig-CD_ndhB fig-pos="H" layout="[[1,-0.3,1], [1,-0.3,1]]"}
+
+![HC](Figures_Causal_Discovery/DAG_HC_ndhB.png){width=300 .lightbox group=CD-ndhB}
+
+![PC](Figures_Causal_Discovery/DAG_PC_ndhB.png){width=350 .lightbox group=CD-ndhB}
+
+![LiNGAM](Figures_Causal_Discovery/DAG_LiNGAM_ndhB.png){width=300 .lightbox group=CD-ndhB}
+
+![NOTEARS](Figures_Causal_Discovery/DAG_NOTEARS_ndhB.png){width=350 .lightbox group=CD-ndhB}
+
+Causal Discovery for _ndhB_
+:::
+
+::: {#fig-CD_ndhD fig-pos="H" layout="[[1,-0.3,1], [1,-0.3,1]]"}
+
+![HC](Figures_Causal_Discovery/DAG_HC_ndhD.png){width=300 .lightbox group=CD-ndhD}
+
+![PC](Figures_Causal_Discovery/DAG_PC_ndhD.png){width=350 .lightbox group=CD-ndhD}
+
+![LiNGAM](Figures_Causal_Discovery/DAG_LiNGAM_ndhD.png){width=300 .lightbox group=CD-ndhD}
+
+![NOTEARS](Figures_Causal_Discovery/DAG_NOTEARS_ndhD.png){width=300 .lightbox group=CD-ndhD}
+
+Causal Discovery for _ndhD_
+:::
+
+
+### Interventional reasoning {#sec-quant_CausalEffects}
+
+Having identified directed edges through causal discovery, we now turn to the question of whether these edges reflect true causal relationships. To assess this, we apply **interventional reasoning** using the `DoWhy` Python library [@dowhy], which enables us to estimate the **Average Causal Effect (ACE)** of one event on another.
+
+The **ACE** quantifies how much the outcome $Y$ would change on average if we were to intervene and set the treatment variable $X$ to 1 versus 0. Formally, it is defined as
+
+$$
+\text{ACE} := \mathbb{E}[Y \mid \text{do}(X=1)] - \mathbb{E}[Y \mid \text{do}(X=0)].
+$$
+
+In situations where a mediator lies along the causal path from $X$ to $Y$, we instead focus on estimating the Natural Direct Effect (NDE), which captures the component of the effect not transmitted through the mediator.
+
+To carry out this analysis, we follow a structured four-step process for each DAG learned from the data:
+
+1. **Model creation**. For each pair of events $(A, B)$ connected by a directed edge $A \rightarrow B$, we construct a `CausalModel` in `DoWhy`, designating $A$ as the treatment and $B$ as the outcome.
+
+2. **Identification**. Using the structure of the DAG, `DoWhy` checks whether the causal effect is identifiable from observational data. This step relies on graphical criteria such as the **backdoor** and **frontdoor** conditions derived from do-calculus.
+
+3. **Estimation**. If the effect is identifiable, we estimate the ACE using statistical techniques such as linear regression or matching. When mediators are detected, the estimation is refined to isolate the NDE.
+
+4. **Validation**. Finally, we retain only those causal links for which the estimated ACE is strictly positive, indicating a likely genuine causal influence. When an NDE is used, this value is reported instead. In both cases, the result is recorded in our summary tables under the label _Actual Effect_.
+
+Full estimation details are provided in the appendix [@sec-causal_inference_results], specifically in the _Causal relations figures_ ([@fig-CR_ndhB] and [@fig-CR_ndhD]), which present the most relevant causal relationships inferred from each of the previously obtained graphs together with the corresponding _Actual Effect_ value. We refer to the available material at our [GitHub repository](https://github.com/rmartosprieto/chloroDAG.git) for further precisions.
+
+
+
+### Chronology representation
+
+The final step in our pipeline is ***Chronology representation***: we construct the _maximal causality path_ based on the previous analysis. Among all valid causal relationships estimated previously, we retain only those with the highest impact in accordance with the topological order of the discovered DAG. The construction of the causal-chronology DAG is carried out in several steps.
+
+i. We sort the rows of the causal inference tables in descending order of _Actual Effect_.
+
+ii. Among the possible causes for the same 'Outcome (Y)', we retain only the one with the greatest _Actual Effect_. This yields a collection of _high-impact_ cause-effect arrows, which we refer to as *strong_causal_relations*.
+
+iii. We compute the topological order of the discovered DAG and determine the level of each node. This is done using the `topological_sorting()` function from the `igraph` Python library (cf. [@igraphLibrary]). The nodes are then grouped by their topological level.
+
+iv. We sort the directed edges in *strong_causal_relations* in accordance with the topological levels of their source nodes.
+
+v. We construct the corresponding DAG, thereby defining the chronology.
+
+vi. We verify whether all roots of the initial DAG are included in the chronology. If not, they are added as isolated nodes (at topological level $0$).
+
+vii. We add all nodes that were already isolated in the initial DAG as well as those that can become isolated after this construction.
+
+
+::: {#rem-chron_tree}
+Note that this construction implies that the resulting causal-chronology DAG is a (directed) _tree_. Indeed, in this procedure each node has at most one incoming edge (since only the strongest causal link is retained for each outcome) and cycles are prevented by the topological ordering.
+:::
+
+The application of this method to the _ndhB_ and _ndhD_ genes of the chloroplast of _Arabidopsis thaliana_ yields the maturation timelines represented in their DAG form in [@fig-Chron_ndhB] and [@fig-Chron_ndhD], respectively.
+
+::: {#fig-Chron_ndhB fig-pos="H" layout="[[1,-0.3,1], [1,-0.3,1]]"}
+
+![HC-model](Figures_Causal_Chronology/chron_DAG_HC_ndhB.png){width=300 .lightbox group=Chron-ndhB}
+
+![PC-model](Figures_Causal_Chronology/chron_DAG_PC_ndhB.png){width=300 .lightbox group=Chron-ndhB}
+
+![LiNGAM-model](Figures_Causal_Chronology/chron_DAG_LiNGAM_ndhB.png){width=300 .lightbox group=Chron-ndhB}
+
+![NOTEARS-model](Figures_Causal_Chronology/chron_DAG_NOTEARS_ndhB.png){width=300 .lightbox group=Chron-ndhB}
+
+Causal models for maturation chronology for _ndhB_
+:::
+
+::: {#fig-Chron_ndhD fig-pos="H" layout="[[1,-0.3,1], [1,-0.3,1]]"}
+
+![HC-model](Figures_Causal_Chronology/chron_DAG_HC_ndhD.png){width=300 .lightbox group=Chron-ndhD}
+
+![PC-model](Figures_Causal_Chronology/chron_DAG_PC_ndhD.png){width=300 .lightbox group=Chron-ndhD}
+
+![LiNGAM-model](Figures_Causal_Chronology/chron_DAG_LiNGAM_ndhD.png){width=300 .lightbox group=Chron-ndhD}
+
+![NOTEARS-model](Figures_Causal_Chronology/chron_DAG_NOTEARS_ndhD.png){width=300 .lightbox group=Chron-ndhD}
+
+Causal models for maturation chronology for _ndhD_
+:::
+
+
+
+
+These results naturally raise the question: *which model should be selected for a given gene?*
+
+One approach is to validate each model against both the data and existing expert knowledge. Details of this validation process — including assessments of the causal estimators and the inferred DAG structures — are provided in [@sec-Reliability].
+
+Another complementary strategy is to perform a comparative analysis of the inferred networks across multiple models, aiming to identify **consistently recovered edges**. This consensus-based approach highlights stable relationships—whether directed or undirected—that appear robust to modeling choices. These consensus edges, combined with expert knowledge, can then be used to define a **whitelist** of trusted connections, guiding the construction of a more accurate and interpretable regulatory network.
+
+For example, the cross-analysis of the causal models for *ndhB* ([@fig-Chron_ndhB]) yields the sets of consistently recovered directed and undirected edges represented in [@fig-cross_analysis_ndhB] as a multigraph.
+
+
+::: {#fig-cross_analysis_ndhB fig-pos="H" layout="[[1,-0.3,1], [1,-0.3,1]]"}
+
+```{python}
+#| label: fig-cross_analysis_ndhB_dir
+#| fig-cap: Directed edges in at least 2 models for _ndhB_
+#| echo: false
+#| message: false
+#| warning: false
+
+import pandas as pd
+import networkx as nx
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+
+
+# Load data
+consistent_arrows = pd.read_csv("Tables_cross-analysis/consistent_arrows_at2_ndhB.csv", index_col=0)
+
+# Extract the nodes as a list
+edges =  consistent_arrows.iloc[:, :2].values.tolist()
+nodes = [x for pair in edges for x in pair]
+nodes = list(set(nodes))
+
+color_model = {'HC': "#F2D053",
+               'PC': "#5FBCCF",
+               'LiNGAM': "#5A2EA2",
+               'NOTEARS': "#D4449D"}
+
+# Create a (resp. Directed) multigraph
+plt.figure(figsize=(5,5))
+G = nx.MultiDiGraph()
+
+G.add_nodes_from(nodes)
+
+G.add_edge(edges[0][0], edges[0][1], key=0, weight=2, color=color_model['HC'])
+G.add_edge(edges[0][0], edges[0][1], key=1, weight=2, color=color_model['NOTEARS'])
+
+G.add_edge(edges[1][0], edges[1][1], key=0, weight=2, color=color_model['PC'])
+G.add_edge(edges[1][0], edges[1][1], key=1, weight=2, color=color_model['NOTEARS'])
+
+G.add_edge(edges[2][0], edges[2][1], key=0, weight=2, color=color_model['PC'])
+G.add_edge(edges[2][0], edges[2][1], key=1, weight=2, color=color_model['NOTEARS'])
+
+# Layout
+pos = nx.shell_layout(G)
+
+# Draw nodes and labels
+nx.draw_networkx_nodes(G, pos, node_color="black", edgecolors='black', linewidths=1.5, node_size=300)
+label_pos = {node: (x, y - 0.1) for node, (x, y) in pos.items()}
+nx.draw_networkx_labels(G, label_pos, font_size=7)
+
+# Draw edges with varying curvature
+for src, tgt, key, data in G.edges(keys=True, data=True):
+    rad = 0.2 * (key - 1) 
+    nx.draw_networkx_edges(G,
+                           pos,
+                           edgelist=[(src, tgt)],
+                           arrows=True,
+                           arrowstyle='->',
+                           arrowsize=17,
+                           width=data.get("weight"),
+                           edge_color=data.get("color", "black"),
+                           connectionstyle=f"arc3,rad={rad}")
+
+# Add a legend
+legend_elements = [Line2D([0], [0], color=color, lw=2.5, label=model) for model, color in color_model.items()]
+plt.legend(handles=legend_elements,
+           title="Model's color",
+           loc='lower left',
+           frameon=True,
+           fontsize=10,
+           title_fontsize=8)
+plt.axis('off')
+for spine in plt.gca().spines.values():
+    spine.set_visible(False)
+plt.tight_layout()
+```
+
+
+```{python}
+#| label: fig-cross_analysis_ndhB_undir
+#| fig-cap: Undirected edges in at least 3 models for _ndhB_
+#| echo: false
+#| message: false
+#| warning: false
+
+import ast
+import pandas as pd
+import networkx as nx
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+
+
+# Load data
+consistent_edges = pd.read_csv("Tables_cross-analysis/consistent_edges_at3_ndhB.csv", index_col=0)
+
+# Extract the nodes as a list
+edges = [list(ast.literal_eval(pair)) for pair in consistent_edges['Edge']]
+nodes = [x for pair in edges for x in pair]
+nodes = list(set(nodes))
+
+color_model = {'HC': "#F2D053",
+               'PC': "#5FBCCF",
+               'LiNGAM': "#5A2EA2",
+               'NOTEARS': "#D4449D"}
+
+# Create a (resp. Directed) multigraph
+plt.figure(figsize=(5,5))
+G = nx.MultiGraph()
+
+G.add_nodes_from(nodes)
+
+G.add_edge(edges[0][0], edges[0][1], key=0, weight=2, color=color_model['HC'])
+G.add_edge(edges[0][0], edges[0][1], key=2, weight=2, color=color_model['PC'])
+G.add_edge(edges[0][0], edges[0][1], key=3, weight=2, color=color_model['NOTEARS'])
+
+G.add_edge(edges[1][0], edges[1][1], key=0, weight=2, color=color_model['PC'])
+G.add_edge(edges[1][0], edges[1][1], key=1, weight=2, color=color_model['LiNGAM'])
+G.add_edge(edges[1][0], edges[1][1], key=2, weight=2, color=color_model['NOTEARS'])
+
+G.add_edge(edges[2][0], edges[2][1], key=0, weight=2, color=color_model['PC'])
+G.add_edge(edges[2][0], edges[2][1], key=1, weight=2, color=color_model['LiNGAM'])
+G.add_edge(edges[2][0], edges[2][1], key=2, weight=2, color=color_model['NOTEARS'])
+
+# Layout
+pos = nx.shell_layout(G)
+
+# Draw nodes and labels
+nx.draw_networkx_nodes(G, pos, node_color="black", edgecolors='black', linewidths=1.5, node_size=300)  # Nodos más pequeños
+label_pos = {node: (x, y - 0.1) for node, (x, y) in pos.items()}
+nx.draw_networkx_labels(G, label_pos, font_size=7)
+
+# Draw edges with varying curvature
+for src, tgt, key, data in G.edges(keys=True, data=True):
+    rad = 0.2 * (key - 1) 
+    nx.draw_networkx_edges(G,
+                           pos,
+                           edgelist=[(src, tgt)],
+                           width=data.get("weight"),
+                           edge_color=data.get("color", "black"),
+                           connectionstyle=f"arc3,rad={rad}")
+
+# Add a legend
+legend_elements = [Line2D([0], [0], color=color, lw=2.5, label=model) for model, color in color_model.items()]
+plt.legend(handles=legend_elements,
+           title="Model's color",
+           loc='lower left',
+           frameon=True,
+           fontsize=10,
+           title_fontsize=8)
+plt.axis('off')
+for spine in plt.gca().spines.values():
+    spine.set_visible(False)
+plt.tight_layout()
+```
+
+Cross-analysis for consistently recovered edges within _ndhB_ causal models
+:::
+
+
+
+
+The cross-analysis of the causal models for *ndhD* ([@fig-Chron_ndhD]) yields the sets of consistently recovered directed and undirected edges represented in [@fig-cross_analysis_ndhD] as a multigraph.
+
+::: {#fig-cross_analysis_ndhD fig-pos="H" layout="[[1,-0.3,1], [1,-0.3,1]]"}
+
+```{python}
+#| label: fig-cross_analysis_ndhD_dir
+#| fig-cap: Directed edges in at least 3 models for _ndhD_
+#| echo: false
+#| message: false
+#| warning: false
+
+import pandas as pd
+import networkx as nx
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+
+
+# Load data
+consistent_arrows = pd.read_csv("Tables_cross-analysis/consistent_arrows_at3_ndhD.csv", index_col=0)
+
+# Extract the nodes as a list
+edges =  consistent_arrows.iloc[:, :2].values.tolist()
+nodes = [x for pair in edges for x in pair]
+nodes = list(set(nodes))
+
+color_model = {'HC': "#F2D053",
+               'PC': "#5FBCCF",
+               'LiNGAM': "#5A2EA2",
+               'NOTEARS': "#D4449D"}
+
+# Create a (resp. Directed) multigraph
+plt.figure(figsize=(5,5))
+G = nx.MultiDiGraph()
+
+G.add_nodes_from(nodes)
+
+G.add_edge(edges[0][0], edges[0][1], key=0, weight=2, color=color_model['HC'])
+G.add_edge(edges[0][0], edges[0][1], key=2, weight=2, color=color_model['LiNGAM'])
+G.add_edge(edges[0][0], edges[0][1], key=3, weight=2, color=color_model['NOTEARS'])
+
+G.add_edge(edges[1][0], edges[1][1], key=0, weight=2, color=color_model['HC'])
+G.add_edge(edges[1][0], edges[1][1], key=1, weight=2, color=color_model['PC'])
+G.add_edge(edges[1][0], edges[1][1], key=3, weight=2, color=color_model['NOTEARS'])
+
+# Layout
+pos = nx.shell_layout(G)
+
+# Draw nodes and labels
+nx.draw_networkx_nodes(G, pos, node_color="black", edgecolors='black', linewidths=1.5, node_size=300)  # Nodos más pequeños
+label_pos = {node: (x, y - 0.1) for node, (x, y) in pos.items()}
+nx.draw_networkx_labels(G, label_pos, font_size=8)
+
+# Draw edges with varying curvature
+for src, tgt, key, data in G.edges(keys=True, data=True):
+    rad = 0.2 * (key - 1) 
+    nx.draw_networkx_edges(G,
+                           pos,
+                           edgelist=[(src, tgt)],
+                           arrows=True,
+                           arrowstyle='->',
+                           arrowsize=17,
+                           width=data.get("weight"),
+                           edge_color=data.get("color", "black"),
+                           connectionstyle=f"arc3,rad={rad}")
+
+# Add a legend
+legend_elements = [Line2D([0], [0], color=color, lw=2.5, label=model) for model, color in color_model.items()]
+plt.legend(handles=legend_elements,
+           title="Model's color",
+           loc='lower left',
+           frameon=True,
+           fontsize=10,
+           title_fontsize=8)
+plt.axis('off')
+for spine in plt.gca().spines.values():
+    spine.set_visible(False)
+plt.tight_layout()
+```
+
+
+```{python}
+#| label: fig-cross_analysis_ndhD_undir
+#| fig-cap: Undirected edges in at least 3 models for _ndhD_
+#| echo: false
+#| message: false
+#| warning: false
+
+import ast
+import pandas as pd
+import networkx as nx
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+
+
+# Load data
+consistent_edges = pd.read_csv("Tables_cross-analysis/consistent_edges_at3_ndhD.csv", index_col=0)
+
+# Extract the nodes as a list
+edges = [list(ast.literal_eval(pair)) for pair in consistent_edges['Edge']]
+nodes = [x for pair in edges for x in pair]
+nodes = list(set(nodes))
+
+color_model = {'HC': "#F2D053",
+               'PC': "#5FBCCF",
+               'LiNGAM': "#5A2EA2",
+               'NOTEARS': "#D4449D"}
+
+# Create a (resp. Directed) multigraph
+plt.figure(figsize=(5,5))
+G = nx.MultiGraph()
+
+G.add_nodes_from(nodes)
+
+G.add_edge(edges[0][0], edges[0][1], key=0, weight=2, color=color_model['HC'])
+G.add_edge(edges[0][0], edges[0][1], key=1, weight=2, color=color_model['PC'])
+G.add_edge(edges[0][0], edges[0][1], key=2, weight=2, color=color_model['LiNGAM'])
+G.add_edge(edges[0][0], edges[0][1], key=3, weight=2, color=color_model['NOTEARS'])
+
+G.add_edge(edges[1][0], edges[1][1], key=0, weight=2, color=color_model['HC'])
+G.add_edge(edges[1][0], edges[1][1], key=1, weight=2, color=color_model['PC'])
+G.add_edge(edges[1][0], edges[1][1], key=3, weight=2, color=color_model['NOTEARS'])
+
+G.add_edge(edges[2][0], edges[2][1], key=0, weight=2, color=color_model['HC'])
+G.add_edge(edges[2][0], edges[2][1], key=1, weight=2, color=color_model['PC'])
+G.add_edge(edges[2][0], edges[2][1], key=2, weight=2, color=color_model['LiNGAM'])
+G.add_edge(edges[2][0], edges[2][1], key=3, weight=2, color=color_model['NOTEARS'])
+
+# Layout
+pos = nx.shell_layout(G)
+
+# Draw nodes and labels
+nx.draw_networkx_nodes(G, pos, node_color="black", edgecolors='black', linewidths=1.5, node_size=300)  # Nodos más pequeños
+label_pos = {node: (x, y - 0.1) for node, (x, y) in pos.items()}
+nx.draw_networkx_labels(G, label_pos, font_size=8)
+
+# Draw edges with varying curvature
+for src, tgt, key, data in G.edges(keys=True, data=True):
+    rad = 0.2 * (key - 1) 
+    nx.draw_networkx_edges(G,
+                           pos,
+                           edgelist=[(src, tgt)],
+                           width=data.get("weight"),
+                           edge_color=data.get("color", "black"),
+                           connectionstyle=f"arc3,rad={rad}")
+
+# Add a legend
+legend_elements = [Line2D([0], [0], color=color, lw=2.5, label=model) for model, color in color_model.items()]
+plt.legend(handles=legend_elements,
+           title="Model's color",
+           loc='lower left',
+           frameon=True,
+           fontsize=10,
+           title_fontsize=8)
+plt.axis('off')
+for spine in plt.gca().spines.values():
+    spine.set_visible(False)
+plt.tight_layout()
+```
+
+Cross-analysis for consistently recovered edges within _ndhD_ causal models
+:::
+
+
+
+
+
+### Comparison with Reference Models
+
+We next compare our inferred maturation timelines with the reference chronologies presented by Guilcher *et al.* [@Long_Reads_GuilcherEtAl] to assess whether the causal-chronology models provide a superior fit to the observed maturation process.
+
+The reference timelines for *ndhB* and *ndhD*, as defined in [@Long_Reads_GuilcherEtAl], are illustrated in DAG form in [@fig-ref_chrons].
+
+::: {#fig-ref_chrons fig-pos="H" layout="[[1,-0.3,1], [1,-0.3,1]]"}
+
+![_ndhB_](Figures_Reference_Graphs/chron_ndhB_Fig6_without_intron.png){fig-pos="H" width=300 .lightbox group=ref-chrons}
+
+![_ndhD_](Figures_Reference_Graphs/chron_ndhD_Fig6.png){fig-pos="H" width=300 .lightbox group=ref-chrons}
+
+Reference models for maturation chronology
+:::
+
+::: {#rem-intron}
+Note that the reference timeline for *ndhB*, illustrated in [@fig-ref_chrons], does not include the *intron*. This is because we observed that this event has an abnormally large effect on the others. In fact, all graphs we recovered with the deterministic or causal approach were unfalsifiable; removing this event makes them falsifiable. We decided to remove from the analysis which is further justified because, according to [@Long_Reads_GuilcherEtAl], the intron event occurred at the very end of the timeline.
+:::
+
+
+To conduct the comparison, we evaluated both sets of models (causal-chronology vs. reference) using two standard metrics: the Bayesian Information Criterion (BIC) and the Log-Likelihood. The BIC balances model fit with complexity, penalizing overfitting, while the Log-Likelihood measures how well the model explains the observed data.
+
+First, for each model we constructed a `DiscreteBayesianNetwork` using the `pgmpy` library ([@pgmpyLibrary]), and estimated its Conditional Probability Distributions via a `BayesianEstimator`. We then computed `structure_score` (BIC) and `log_likelihood_score` on both the reference and causal-chronology networks. Implementation details and configuration settings are available in our [GitHub repository](https://github.com/rmartosprieto/chloroDAG.git).
+
+The results, compiled in the charts of [@fig-scores], show that at least one causal-chronology model dominates the reference model in both BIC and log-likelihood. Importantly, *ndhB* shows three exceptions: the HC, PC and LiNGAM causal models underperform compared to the reference. Note however that the PC model is close to the reference model. Furthermore, performance differences are observed across causal discovery algorithms. These exceptions and performance variations are mainly due to the dataset size in terms of the number of variables. For instance, NOTEARS achieved better scores than the other methods for *ndhB*, but not for *ndhD*. Conversely, LiNGAM achieved better scores than the other methods for *ndhD*, but not for *ndhB*.
+
+::: {#fig-scores fig-pos="H" layout="[[1,-0.3,1], [1,-0.3,1]]"}
+
+```{python}
+#| label: chart-BIC_scores_ndhB
+#| fig-cap: BIC scores for *ndhB*
+#| echo: false
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
+
+
+# Plot BIC scores
+# Load data
+bic = pd.read_csv("Tables_Scoring/BIC_scoring_summary_ndhB.csv", sep=";", index_col=0)
+
+# Recover the model names from the DataFrame and sort them by Score
+reference_score = pd.DataFrame({
+    "Causal model": ["Reference"],
+    "Scores": bic.iloc[0,0]
+})
+bic = pd.concat([bic, reference_score], ignore_index=True)
+bic_sorted = bic.sort_values(by="Scores", ascending=False)
+bic_scores_sorted = bic_sorted["Scores"].values
+causal_models_sorted = bic_sorted["Causal model"].values
+
+# Define the color map for the bars (from matplotlib)
+norm_color = mcolors.Normalize(vmin=min(bic_scores_sorted), vmax=max(bic_scores_sorted))
+colormap = cm.cividis
+colors = [colormap(norm_color(value)) for value in bic_scores_sorted]
+# Define the color map for the bars (starting from a given color)
+# base_color_hex = "#0ABE8B"
+# base_rgb = mcolors.to_rgb(base_color_hex)
+# colors = [(base_rgb[0], base_rgb[1], base_rgb[2], 0.3 + (1 - 0.3) * norm_color(value)) for value in bic_scores_sorted]
+
+# Plot
+fig_BIC, ax_BIC = plt.subplots(figsize=(14, 8))
+bars_BIC = ax_BIC.bar(causal_models_sorted, bic_sorted["Scores"], color=colors)
+
+# ax_BIC.set_title("Bayesian Information Criterion (higher is better)", fontsize=35)
+ax_BIC.set_ylabel("BIC score", fontsize=35)
+# ax_BIC.set_xlabel("Causal Model", fontsize=35)
+ax_BIC.set_xticks(range(len(causal_models_sorted)))
+ax_BIC.set_xticklabels(causal_models_sorted)
+ax_BIC.tick_params(axis='both', labelsize=28)
+
+plt.tight_layout()
+# plt.show()
+# plt.savefig('Charts Scores/ndhB_BIC_scores.png')
+```
+
+```{python}
+#| label: chart-logl_scores_ndhB
+#| fig-cap: Log-likelihood scores for *ndhB*
+#| echo: false
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
+
+
+# Plot Log-Likelihood scores
+# Load data
+logl = pd.read_csv("Tables_Scoring/LogL_scoring_summary_ndhB.csv", sep=";", index_col=0)
+
+# Recover the model names from the DataFrame and sort them by Score
+reference_score = pd.DataFrame({
+    "Causal model": ["Reference"],
+    "Scores": logl.iloc[0,0]
+})
+logl = pd.concat([logl, reference_score], ignore_index=True)
+logl_sorted = logl.sort_values(by="Scores", ascending=False)
+logl_scores_sorted = logl_sorted["Scores"].values
+causal_models_sorted = logl_sorted["Causal model"].values
+
+# Define the color map for the bars (from matplotlib)
+norm_color = mcolors.Normalize(vmin=min(logl_scores_sorted), vmax=max(logl_scores_sorted))
+colormap = cm.cividis
+colors = [colormap(norm_color(value)) for value in logl_scores_sorted]
+# Define the color map for the bars (starting from a given color)
+# base_color_hex = "#0ABE8B"
+# base_rgb = mcolors.to_rgb(base_color_hex)
+# colors = [(base_rgb[0], base_rgb[1], base_rgb[2], 0.3 + (1 - 0.3) * norm_color(value)) for value in logl_scores_sorted]
+
+# Plot
+fig_logl, ax_logl = plt.subplots(figsize=(14, 8))
+ax_logls_logl = ax_logl.bar(causal_models_sorted, logl_sorted["Scores"], color=colors)
+
+# ax_logl.set_title("Log-likelihood scores (higher is better)", fontsize=35)
+ax_logl.set_ylabel("Log-likelihood", fontsize=35)
+# ax_logl.set_xlabel("Causal Model", fontsize=35)
+ax_logl.set_xticks(range(len(causal_models_sorted)))
+ax_logl.set_xticklabels(causal_models_sorted)
+ax_logl.tick_params(axis='both', labelsize=28)
+
+plt.tight_layout()
+# plt.show()
+# plt.savefig('Charts Scores/ndhB_logl_scores.png')
+```
+
+```{python}
+#| label: chart-BIC_scores_ndhD
+#| fig-cap: BIC scores for *ndhD*
+#| echo: false
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
+
+
+# Plot BIC scores
+# Load data
+bic = pd.read_csv("Tables_Scoring/BIC_scoring_summary_ndhD.csv", sep=";", index_col=0)
+
+# Recover the model names from the DataFrame and sort them by Score
+reference_score = pd.DataFrame({
+    "Causal model": ["Reference"],
+    "Scores": bic.iloc[0,0]
+})
+bic = pd.concat([bic, reference_score], ignore_index=True)
+bic_sorted = bic.sort_values(by="Scores", ascending=False)
+bic_scores_sorted = bic_sorted["Scores"].values
+causal_models_sorted = bic_sorted["Causal model"].values
+
+# Define the color map for the bars (from matplotlib)
+norm_color = mcolors.Normalize(vmin=min(bic_scores_sorted), vmax=max(bic_scores_sorted))
+colormap = cm.cividis
+colors = [colormap(norm_color(value)) for value in bic_scores_sorted]
+# Define the color map for the bars (starting from a given color)
+# base_color_hex = "#0ABE8B"
+# base_rgb = mcolors.to_rgb(base_color_hex)
+# colors = [(base_rgb[0], base_rgb[1], base_rgb[2], 0.3 + (1 - 0.3) * norm_color(value)) for value in bic_scores_sorted]
+
+# Plot
+fig_BIC, ax_BIC = plt.subplots(figsize=(14, 8))
+bars_BIC = ax_BIC.bar(causal_models_sorted, bic_sorted["Scores"], color=colors)
+
+# ax_BIC.set_title("Bayesian Information Criterion (higher is better)", fontsize=35)
+ax_BIC.set_ylabel("BIC score", fontsize=35)
+# ax_BIC.set_xlabel("Causal Model", fontsize=35)
+ax_BIC.set_xticks(range(len(causal_models_sorted)))
+ax_BIC.set_xticklabels(causal_models_sorted)
+ax_BIC.tick_params(axis='both', labelsize=28)
+
+plt.tight_layout()
+# plt.show()
+# plt.savefig('Charts Scores/ndhD_BIC_scores.png')
+```
+
+```{python}
+#| label: chart-logl_scores_ndhD
+#| fig-cap: Log-likelihood scores for *ndhD*
+#| echo: false
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
+
+
+# Plot Log-Likelihood scores
+# Load data
+logl = pd.read_csv("Tables_Scoring/LogL_scoring_summary_ndhD.csv", sep=";", index_col=0)
+
+# Recover the model names from the DataFrame and sort them by Score
+reference_score = pd.DataFrame({
+    "Causal model": ["Reference"],
+    "Scores": logl.iloc[0,0]
+})
+logl = pd.concat([logl, reference_score], ignore_index=True)
+logl_sorted = logl.sort_values(by="Scores", ascending=False)
+logl_scores_sorted = logl_sorted["Scores"].values
+causal_models_sorted = logl_sorted["Causal model"].values
+
+# Define the color map for the bars (from matplotlib)
+norm_color = mcolors.Normalize(vmin=min(logl_scores_sorted), vmax=max(logl_scores_sorted))
+colormap = cm.cividis
+colors = [colormap(norm_color(value)) for value in logl_scores_sorted]
+# Define the color map for the bars (starting from a given color)
+# base_color_hex = "#0ABE8B"
+# base_rgb = mcolors.to_rgb(base_color_hex)
+# colors = [(base_rgb[0], base_rgb[1], base_rgb[2], 0.3 + (1 - 0.3) * norm_color(value)) for value in logl_scores_sorted]
+
+# Plot
+fig_logl, ax_logl = plt.subplots(figsize=(14, 8))
+ax_logls_logl = ax_logl.bar(causal_models_sorted, logl_sorted["Scores"], color=colors)
+
+# ax_logl.set_title("Log-likelihood scores (higher is better)", fontsize=35)
+ax_logl.set_ylabel("Log-likelihood", fontsize=35)
+# ax_logl.set_xlabel("Causal Model", fontsize=35)
+ax_logl.set_xticks(range(len(causal_models_sorted)))
+ax_logl.set_xticklabels(causal_models_sorted)
+ax_logl.tick_params(axis='both', labelsize=28)
+
+plt.tight_layout()
+# plt.show()
+# plt.savefig('Charts Scores/ndhD_logl_scores.png')
+```
+
+Bar plots of standard metrics for causal-chronology models and reference models: *higher is better*. Note that the scores (y-axes) are *negative values*.
+:::
+
+A complementary metric used to compare our causal-chronology models to the reference is based on the Bayesian network structure itself, as explained in [@sec-fals_tests]. [@fig-falsification_summaries] summarizes the results of the falsification tests conducted to assess whether the corresponding DAG is accepted or rejected based on its fit with the provided data in terms of conditional independencies. Notably, we observe in [@fig-falsification_summaries] that there are always at least two causal-chronology models that pass the tests with very high performance. As for the reference model, it is rejected for *ndhD* and accepted for *ndhB*.
+
+
+
+
+
+
+### Reliability of the Proposed Methodology {#sec-Reliability}
+
+To conclude our case study, we assess the **reliability** of the proposed methodology from two complementary perspectives: the stability of the estimated causal effects and the validity of the inferred graph structures.
+
+#### Robustness of causal effect estimates
+
+The causal effects derived in our inference phase—such as the Average Causal Effect (ACE), Natural Direct Effect (NDE), and Natural Indirect Effect (NIE)—are influenced by modeling decisions, including the structure of the underlying graph and the statistical estimators used. To ensure that our results are not artifacts of specific configurations or assumptions, we subject these estimates to robustness checks.
+
+These include tests that examine whether effect estimates remain stable under data perturbations, such as subsetting or introducing unrelated variables. Additional checks evaluate whether the estimates degrade appropriately when key assumptions are violated. Taken together, these tests help identify estimates that are likely reliable versus those that may be overly sensitive to modeling choices.
+
+All reported causal effects (presented in [@fig-CR_ndhB] and [@fig-CR_ndhD]) for which such analyses could be conducted passed the relevant robustness checks. Full results are available at our [GitHub repository](https://github.com/rmartosprieto/chloroDAG.git).
+
+#### Consistency of learned graph structures {#sec-fals_tests}
+
+Beyond individual effects, it is essential to validate the overall graphical models produced during causal discovery. A well-specified DAG should capture the key conditional independencies present in the data, and differ meaningfully from random alternatives.
+
+To this end, we assess whether each graph implies conditional independence relations that are consistent with the observed data, and whether the graph lies in a narrow equivalence class—indicating a structure that is both specific and informative. These tests collectively provide insight into whether the learned DAG captures more than statistical noise or arbitrary correlations. The results (summarized in [@fig-falsification_summaries]) reveal that there are always at least two causal-chronology models that pass the tests with very high performance.
+
+
+
+::: {#fig-falsification_summaries fig-pos="H" layout="[[1,-0.3,1], [1,-0.3,1]]"}
+
+```{python}
+#| echo: false
+#| label: chart-falsificaton_ndhB
+#| fig-cap: Falsification tests for *ndhB*
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
+from matplotlib.patches import Patch
+
+
+# Plot BIC scores
+# Load data
+falsification = pd.read_csv("Tables_Falsification/falsification_ndhB.csv", sep=";", index_col=0)
+
+# Recover the model names from the DataFrame and sort them by Performance
+falsification_sorted = falsification.sort_values(by="Performance: better than…", ascending=False)
+violated_LMC = falsification_sorted["No. violated LMCs"].values
+permutated_MEC = falsification_sorted["No. perm. in MEC"].values
+falsifiable = falsification_sorted["Falsifiable"].values
+falsified = falsification_sorted["Falsified"].values
+performance_sorted = falsification_sorted["Performance: better than…"].values
+causal_models_sorted = falsification_sorted["Model"].values
+
+# Define the color map for the bars (according to the result of the column "DAG rejected?")
+colors = ["#2AB013" if rejected == "No" else "#B0132B" for rejected in falsification_sorted["DAG rejected?"].values]
+
+# Plot
+fig_fals, ax_fals = plt.subplots(figsize=(15, 9))
+bars_fals = ax_fals.bar(causal_models_sorted, falsification_sorted["Performance: better than…"], color=colors)
+
+for bar, perm, viol, falsble, falsed in zip(bars_fals, permutated_MEC, violated_LMC, falsifiable, falsified):
+    height = bar.get_height()
+    ax_fals.text(
+        bar.get_x() + bar.get_width() / 2,
+        height / 2,                         
+        f"No. perm. in MEC:\n {perm}\n\n No. viol. LMCs:\n {viol}\n\n ({falsble}, {falsed})",                   
+        ha='center', va='center',     
+        color='white', fontsize=14,        
+        fontweight='bold'
+    )
+
+# ax_fals.set_title("Falsification tests", fontsize=35)
+ax_fals.set_ylabel("Performance (%)", fontsize=35)
+# ax_fals.set_xlabel("Causal Model", fontsize=35)
+ax_fals.set_xticks(range(len(causal_models_sorted)))
+ax_fals.set_xticklabels(causal_models_sorted)
+ax_fals.tick_params(axis='both', labelsize=28)
+
+legend_elements = [
+    Patch(facecolor='#2AB013', label='DAG accepted'),
+    Patch(facecolor='#B0132B', label='DAG rejected')
+]
+ax_fals.legend(handles=legend_elements, title="DAG rejection", title_fontsize=25, fontsize=25)
+
+plt.tight_layout()
+```
+
+```{python}
+#| echo: false
+#| label: chart-falsificaton_ndhD
+#| fig-cap: Falsification tests for *ndhD*
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
+from matplotlib.patches import Patch
+
+
+# Plot BIC scores
+# Load data
+falsification = pd.read_csv("Tables_Falsification/falsification_ndhD.csv", sep=";", index_col=0)
+
+# Recover the model names from the DataFrame and sort them by Performance
+falsification_sorted = falsification.sort_values(by="Performance: better than…", ascending=False)
+violated_LMC = falsification_sorted["No. violated LMCs"].values
+permutated_MEC = falsification_sorted["No. perm. in MEC"].values
+falsifiable = falsification_sorted["Falsifiable"].values
+falsified = falsification_sorted["Falsified"].values
+performance_sorted = falsification_sorted["Performance: better than…"].values
+causal_models_sorted = falsification_sorted["Model"].values
+
+# Define the color map for the bars (according to the result of the column "DAG rejected?")
+colors = ["#2AB013" if rejected == "No" else "#B0132B" for rejected in falsification_sorted["DAG rejected?"].values]
+
+# Plot
+fig_fals, ax_fals = plt.subplots(figsize=(15, 9))
+bars_fals = ax_fals.bar(causal_models_sorted, falsification_sorted["Performance: better than…"], color=colors)
+
+for bar, perm, viol, falsble, falsed in zip(bars_fals, permutated_MEC, violated_LMC, falsifiable, falsified):
+    height = bar.get_height()
+    ax_fals.text(
+        bar.get_x() + bar.get_width() / 2,
+        height / 2,                         
+        f"No. perm. in MEC:\n {perm}\n\n No. viol. LMCs:\n {viol}\n\n ({falsble}, {falsed})",                   
+        ha='center', va='center',     
+        color='white', fontsize=14,        
+        fontweight='bold',
+    )
+
+# ax_fals.set_title("Falsification tests", fontsize=35)
+ax_fals.set_ylabel("Performance (%)", fontsize=35)
+# ax_fals.set_xlabel("Causal Model", fontsize=35)
+ax_fals.set_xticks(range(len(causal_models_sorted)))
+ax_fals.set_xticklabels(causal_models_sorted)
+ax_fals.tick_params(axis='both', labelsize=28)
+
+legend_elements = [
+    Patch(facecolor='#2AB013', label='DAG accepted'),
+    Patch(facecolor='#B0132B', label='DAG rejected')
+]
+ax_fals.legend(handles=legend_elements, title="DAG rejection", title_fontsize=25, fontsize=25)
+
+plt.tight_layout()
+```
+
+Falsification summaries
+::::
+
+
+::: {#rem-falsification}
+Among the four possible (_falsifiable_, _falsified_) outcomes:
+
+- (T, F): the DAG is likely valid or at least not contradicted by the data.
+
+- (T, T): the DAG is both specific and contradicted, therefore likely incorrect.
+
+- (F, F): inconclusive; the structure may be underdetermined by the data.
+
+- (F, T): an inconsistent outcome, suggesting possible issues with implementation or test assumptions.
+
+It is worth noting that some causal structures—such as chains and forks—are probabilistically indistinguishable. Therefore, even when validation tests are passed, expert interpretation remains essential to resolve ambiguities and confirm causal plausibility.
+
+For all these reliability assessments, we leverage the tools available in the `DoWhy` library.
+:::
+
+
+
+
+# Conclusive discussion {#sec-discussion}
+
+We have introduced a new methodology for reconstructing the chronology of genetic regulation events, grounded in Pearl’s causal inference framework. This probabilistic approach represents a conceptual shift from earlier work in the field [@Long_Reads_GuilcherEtAl], moving beyond a deterministic viewpoint modeling to explicit reasoning over interventions. Our method captures the complex interplay of maturation events—consistent with prior findings in the specialized literature (e.g., [@Heterologous_SchmitzEtAl], [@LarchMito_MarechalEtAl], [@ChloroCP31A_TillichEtAl], [@SiteSelective_KarcherBock], [@CisElements_TakenakaNeuwirtBrennicke])—and provides a well-founded strategy for extracting plausible maturation timelines from transcriptomic datasets.
+
+The methodology proceeds in three stages:
+	1.	Causal discovery (learning the DAG structure from data),
+	2.	Causal inference (estimating the effects of interventions), and
+	3.	Chronology construction (building a causal timeline as a tree-like graphical model).
+
+We applied this pipeline to the post-transcriptional regulation of two chloroplast genes, *ndhB* and *ndhD*, in *Arabidopsis thaliana*, generating four alternative causal-chronology models for each gene. Each model corresponds to a distinct causal discovery algorithm. Compared to the reference chronologies [@Long_Reads_GuilcherEtAl], our causal models systematically achieved better fit for *ndhD*, with NOTEARS standing out for *ndhB*, according to both the Bayesian Information Criterion (BIC) and the log-likelihood. Furthermore, their robustness was assessed through multiple refutation tests—both on individual causal effect estimates and on the overall DAG structure—demonstrating a consistent advantage over the reference models for *ndhD*, while the reference model remains valid for *ndhB*.
+
+We acknowledge that the causal discovery step introduces an element of uncertainty, particularly in the presence of latent confounders or limited data. As discussed in [@rem-falsification], causal structure learning cannot be fully validated from observational data alone. To mitigate this limitation, we complemented standard approaches (HC, PC, LiNGAM) with a continuous optimization-based method: NOTEARS [@DagsNotears]. Because NOTEARS does not prescribe a principled way to set the $\ell_1$-regularization parameter—which governs the sparsity of the learned graph—we proposed a two-level stability selection procedure. This approach was benchmarked using the Sachs et al. dataset and shown to improve structural reliability. While [@DagsNotears] also reports results on this dataset, it provides little insight into parameter tuning or sensitivity.
+
+A key practical challenge stemmed from the presence of numerous missing values in the dataset. Naively restricting the analysis to fully observed reads would have resulted in an unacceptable loss of statistical power. Likewise, truncating the variable space to ensure more complete rows would restrict biological interpretability and risk introducing structural biases. To overcome this, we adopted a two-step imputation strategy. First, we performed initial imputation using IterativeImputer from scikit-learn. Then, a custom graphical model-based EM algorithm iteratively refined the imputation and the DAG structure. Interestingly, the choice of initial imputation method proved to have minimal impact on the final graphical model.
+
+Although our contribution is primarily computational, the proposed framework naturally yields testable hypotheses and experimentally verifiable predictions. The estimated causal effects are analogous to those obtained in randomized controlled trials and can therefore inform laboratory experiment design in a principled way. This opens the door to more sophisticated causal analyses, including counterfactual reasoning and targeted *what if?* questions, thereby enriching the interpretative power of long-read transcriptomic studies. These perspectives are aligned with discussions held with the project leaders of [@Long_Reads_GuilcherEtAl].
+
+In summary, we present a principled, flexible, and data-driven framework for exploring gene regulation chronology. By combining causal discovery, statistical inference, and domain expertise, it establishes a foundation for reproducible, hypothesis-driven research in molecular biology.
+
+
+
+# References {.unnumbered}
+
+::: {#refs}
+:::
+
+
+
+
+
+{{< pagebreak >}}
+# Appendices {.appendix}
+
+
+## NOTEARS as a causal discovery algorithm {#sec-notears}
+
+We adapted the NOTEARS algorithm [@DagsNotears] as part of our causal discovery pipeline. NOTEARS formulates the search for a DAG structure as a continuous optimization problem over a weighted adjacency matrix $W$, avoiding the combinatorial complexity of traditional structure learning. The acyclicity constraint is enforced using a smooth algebraic function, and sparsity is promoted via $\ell_1$ regularization. The result is a differentiable objective that can be optimized using gradient-based methods.
+
+In our setting, we observed that NOTEARS was highly sensitive to the choice of the regularization parameter $\lambda$, with small changes leading to radically different graph structures. To address this, we introduced a two-level stability selection strategy (full details are available at our [GitHub repository](https://github.com/rmartosprieto/chloroDAG.git)):
+
+1. For a grid of $\lambda$ values, we performed multiple resampling iterations (bootstrap or sub-sampling) of the input data.
+2. For each configuration, we recorded the set of directed edges returned by NOTEARS.
+3. We defined a directed edge as *stable* if it appeared frequently across both resamplings and a contiguous range of regularization parameters, avoiding overly sparse or overly dense configurations.
+
+This approach allowed us to construct a robust DAG by retaining only stable directed edges. It mitigates two known limitations of NOTEARS: its sensitivity to hyperparameters and the lack of invariance to variable rescaling [@KaiserSipos2021].
+
+While the resulting graphs were more interpretable and robust, it is worth noting that NOTEARS relies on a linear SEM assumption, and its optimization is non-convex. Therefore, learned graphs should be interpreted as hypotheses supported by data, rather than definitive causal claims. As such, we cross-validated NOTEARS outputs with those of HC, PC, and LiNGAM, and report only consistently supported edges in the final causal timelines.
+
+
+
+
+## Causal inference results {#sec-causal_inference_results}
+
+
+::: {#fig-CR_ndhB fig-pos="H" layout="[[1,-0.3,1], [1,-0.3,1]]"}
+
+```{python}
+#| echo: false
+#| label: chart-Causality_HC_ndhB
+#| fig-cap: Causal effects for the HC-model
+#| message: false
+#| warning: false
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+
+# Load data
+causal_relations = pd.read_csv("Tables_Causal_Inference/causal_relations_HC_ndhB.csv", index_col=0)
+strong_causal_relations = causal_relations.drop_duplicates(subset='Outcome (Y)', keep='first') # among the possible causes for the same 'Outcome(Y)' keep only the one with greatest AE
+ 
+adj_matrix = pd.read_csv("Tables_Causal_Inference/chron_AdjMatrix_HC_ndhB.csv", index_col=0)
+nodes = adj_matrix.columns
+adj_matrix = adj_matrix.astype(float)
+
+# Fill the adjacency matrix with the "Actual Effect" values for the corresponding arrows
+for _, row in strong_causal_relations.iterrows():
+    x = row['Cause (X)']
+    y = row['Outcome (Y)']
+    effect = row['Actual Effect']
+    adj_matrix.loc[x, y] = effect
+adj_matrix = adj_matrix.to_numpy()
+
+# Visualize with seaborn heatmap
+plt.figure(figsize=(50,50))
+
+ax_effects = sns.heatmap(adj_matrix, 
+                 annot=False,
+                 # annot_kws={"color": "#2AB013", "fontsize": 8, "fontweight": 'bold'},
+                 fmt=".2f", 
+                 cmap="flare",
+                 xticklabels=nodes, 
+                 yticklabels=nodes, 
+                 cbar=True)
+cbar = ax_effects.collections[0].colorbar
+cbar.ax.tick_params(labelsize=75)
+cbar.set_label("ACE", fontsize=80)
+
+ax_effects.set_xticklabels(nodes, rotation=90)
+ax_effects.set_yticklabels(nodes, rotation=0)
+ax_effects.xaxis.set_ticks_position('top')
+ax_effects.xaxis.set_label_position('top')
+ax_effects.tick_params(axis='both', labelsize=80)
+
+for x, row_label in enumerate(nodes):
+    for y, col_label in enumerate(nodes):
+        val = adj_matrix[x, y]
+
+        if val != 0:
+            ax_effects.text(y + 0.5, x + 0.5,
+                            f"{val:.2f}",
+                            ha='center', va='center',
+                            fontsize=75,
+                            color="white",
+                            # color="#2AB013",
+                            fontweight='bold')
+            
+plt.tight_layout()
+plt.show()
+```
+
+
+```{python}
+#| echo: false
+#| label: chart-Causality_PC_ndhB
+#| fig-cap: Causal effects for the PC-model
+#| message: false
+#| warning: false
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+
+# Load data
+causal_relations = pd.read_csv("Tables_Causal_Inference/causal_relations_PC_ndhB.csv", index_col=0)
+strong_causal_relations = causal_relations.drop_duplicates(subset='Outcome (Y)', keep='first') # among the possible causes for the same 'Outcome(Y)' keep only the one with greatest AE
+ 
+adj_matrix = pd.read_csv("Tables_Causal_Inference/chron_AdjMatrix_PC_ndhB.csv", index_col=0)
+nodes = adj_matrix.columns
+adj_matrix = adj_matrix.astype(float)
+
+# Fill the adjacency matrix with the "Actual Effect" values for the corresponding arrows
+for _, row in strong_causal_relations.iterrows():
+    x = row['Cause (X)']
+    y = row['Outcome (Y)']
+    effect = row['Actual Effect']
+    adj_matrix.loc[x, y] = effect
+adj_matrix = adj_matrix.to_numpy()
+
+# Visualize with seaborn heatmap
+plt.figure(figsize=(50,50))
+
+ax_effects = sns.heatmap(adj_matrix, 
+                 annot=False,
+                 # annot_kws={"color": "#2AB013", "fontsize": 14, "fontweight": 'bold'},
+                 fmt=".2f", 
+                 cmap="flare",
+                 xticklabels=nodes, 
+                 yticklabels=nodes, 
+                 cbar=True)
+cbar = ax_effects.collections[0].colorbar
+cbar.ax.tick_params(labelsize=75)
+cbar.set_label("ACE", fontsize=80)
+
+ax_effects.set_xticklabels(nodes, rotation=90)
+ax_effects.set_yticklabels(nodes, rotation=0)
+ax_effects.xaxis.set_ticks_position('top')
+ax_effects.xaxis.set_label_position('top')
+ax_effects.tick_params(axis='both', labelsize=80)
+
+for x, row_label in enumerate(nodes):
+    for y, col_label in enumerate(nodes):
+        val = adj_matrix[x, y]
+
+        if val != 0:
+            ax_effects.text(y + 0.5, x + 0.5,
+                            f"{val:.2f}",
+                            ha='center', va='center',
+                            fontsize=75,
+                            color="white",
+                            # color="#2AB013",
+                            fontweight='bold')
+            
+plt.tight_layout()
+plt.show()
+```
+
+
+```{python}
+#| echo: false
+#| label: chart-Causality_LiNGAM_ndhB
+#| fig-cap: Causal effects for the LiNGAM-model
+#| message: False
+#| warning: false
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+
+# Load data
+causal_relations = pd.read_csv("Tables_Causal_Inference/causal_relations_LiNGAM_ndhB.csv", index_col=0)
+strong_causal_relations = causal_relations.drop_duplicates(subset='Outcome (Y)', keep='first') # among the possible causes for the same 'Outcome(Y)' keep only the one with greatest AE
+ 
+adj_matrix = pd.read_csv("Tables_Causal_Inference/chron_AdjMatrix_LiNGAM_ndhB.csv", index_col=0)
+nodes = adj_matrix.columns
+adj_matrix = adj_matrix.astype(float)
+
+# Fill the adjacency matrix with the "Actual Effect" values for the corresponding arrows
+for _, row in strong_causal_relations.iterrows():
+    x = row['Cause (X)']
+    y = row['Outcome (Y)']
+    effect = row['Actual Effect']
+    adj_matrix.loc[x, y] = effect
+adj_matrix = adj_matrix.to_numpy()
+
+# Visualize with seaborn heatmap
+plt.figure(figsize=(50,50))
+
+ax_effects = sns.heatmap(adj_matrix, 
+                 annot=False,
+                 # annot_kws={"color": "#2AB013", "fontsize": 14, "fontweight": 'bold'},
+                 fmt=".2f", 
+                 cmap="flare",
+                 xticklabels=nodes, 
+                 yticklabels=nodes, 
+                 cbar=True)
+cbar = ax_effects.collections[0].colorbar
+cbar.ax.tick_params(labelsize=75)
+cbar.set_label("ACE", fontsize=80)
+
+ax_effects.set_xticklabels(nodes, rotation=90)
+ax_effects.set_yticklabels(nodes, rotation=0)
+ax_effects.xaxis.set_ticks_position('top')
+ax_effects.xaxis.set_label_position('top')
+ax_effects.tick_params(axis='both', labelsize=80)
+
+for x, row_label in enumerate(nodes):
+    for y, col_label in enumerate(nodes):
+        val = adj_matrix[x, y]
+
+        if val != 0:
+            ax_effects.text(y + 0.5, x + 0.5,
+                            f"{val:.2f}",
+                            ha='center', va='center',
+                            fontsize=75,
+                            color="white",
+                            # color="#2AB013",
+                            fontweight='bold')
+            
+plt.tight_layout()
+plt.show()
+```
+
+
+```{python}
+#| echo: false
+#| label: chart-Causality_NOTEARS_ndhB
+#| fig-cap: Causal effects for the NOTEARS-model
+#| message: false
+#| warning: false
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+
+# Load data
+causal_relations = pd.read_csv("Tables_Causal_Inference/causal_relations_NOTEARS_ndhB.csv", index_col=0)
+strong_causal_relations = causal_relations.drop_duplicates(subset='Outcome (Y)', keep='first') # among the possible causes for the same 'Outcome(Y)' keep only the one with greatest AE
+ 
+adj_matrix = pd.read_csv("Tables_Causal_Inference/chron_AdjMatrix_NOTEARS_ndhB.csv", index_col=0)
+nodes = adj_matrix.columns
+adj_matrix = adj_matrix.astype(float)
+
+# Fill the adjacency matrix with the "Actual Effect" values for the corresponding arrows
+for _, row in strong_causal_relations.iterrows():
+    x = row['Cause (X)']
+    y = row['Outcome (Y)']
+    effect = row['Actual Effect']
+    adj_matrix.loc[x, y] = effect
+adj_matrix = adj_matrix.to_numpy()
+
+# Visualize with seaborn heatmap
+plt.figure(figsize=(50,50))
+
+ax_effects = sns.heatmap(adj_matrix, 
+                 annot=False,
+                 # annot_kws={"color": "#2AB013", "fontsize": 14, "fontweight": 'bold'},
+                 fmt=".2f", 
+                 cmap="flare",
+                 xticklabels=nodes, 
+                 yticklabels=nodes, 
+                 cbar=True)
+cbar = ax_effects.collections[0].colorbar
+cbar.ax.tick_params(labelsize=75)
+cbar.set_label("ACE", fontsize=80)
+
+ax_effects.set_xticklabels(nodes, rotation=90)
+ax_effects.set_yticklabels(nodes, rotation=0)
+ax_effects.xaxis.set_ticks_position('top')
+ax_effects.xaxis.set_label_position('top')
+ax_effects.tick_params(axis='both', labelsize=80)
+
+for x, row_label in enumerate(nodes):
+    for y, col_label in enumerate(nodes):
+        val = adj_matrix[x, y]
+
+        if val != 0:
+            ax_effects.text(y + 0.5, x + 0.5,
+                            f"{val:.2f}",
+                            ha='center', va='center',
+                            fontsize=75,
+                            color="white",
+                            # color="#2AB013",
+                            fontweight='bold')
+            
+plt.tight_layout()
+plt.show()
+```
+
+Causal relations for _ndhB_
+:::
+
+::: {#fig-CR_ndhD fig-pos="H" layout="[[1,-0.3,1], [1,-0.3,1]]"}
+
+```{python}
+#| echo: false
+#| label: chart-Causality_HC_ndhD
+#| fig-cap: Causal effects for the HC-model
+#| message: false
+#| warning: false
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+
+# Load data
+causal_relations = pd.read_csv("Tables_Causal_Inference/causal_relations_HC_ndhD.csv", index_col=0)
+strong_causal_relations = causal_relations.drop_duplicates(subset='Outcome (Y)', keep='first') # among the possible causes for the same 'Outcome(Y)' keep only the one with greatest AE
+ 
+adj_matrix = pd.read_csv("Tables_Causal_Inference/chron_AdjMatrix_HC_ndhD.csv", index_col=0)
+nodes = adj_matrix.columns
+adj_matrix = adj_matrix.astype(float)
+
+# Fill the adjacency matrix with the "Actual Effect" values for the corresponding arrows
+for _, row in strong_causal_relations.iterrows():
+    x = row['Cause (X)']
+    y = row['Outcome (Y)']
+    effect = row['Actual Effect']
+    adj_matrix.loc[x, y] = effect
+adj_matrix = adj_matrix.to_numpy()
+
+# Visualize with seaborn heatmap
+plt.figure(figsize=(50,50))
+
+ax_effects = sns.heatmap(adj_matrix, 
+                 annot=False,
+                 # annot_kws={"color": "#2AB013", "fontsize": 14, "fontweight": 'bold'},
+                 fmt=".2f", 
+                 cmap="flare",
+                 xticklabels=nodes, 
+                 yticklabels=nodes, 
+                 cbar=True)
+cbar = ax_effects.collections[0].colorbar
+cbar.ax.tick_params(labelsize=75)
+cbar.set_label("ACE", fontsize=80)
+
+ax_effects.set_xticklabels(nodes, rotation=90)
+ax_effects.set_yticklabels(nodes, rotation=0)
+ax_effects.xaxis.set_ticks_position('top')
+ax_effects.xaxis.set_label_position('top')
+ax_effects.tick_params(axis='both', labelsize=80)
+
+for x, row_label in enumerate(nodes):
+    for y, col_label in enumerate(nodes):
+        val = adj_matrix[x, y]
+
+        if val != 0:
+            ax_effects.text(y + 0.5, x + 0.5,
+                            f"{val:.2f}",
+                            ha='center', va='center',
+                            fontsize=75,
+                            color="white",
+                            # color="#2AB013",
+                            fontweight='bold')
+            
+plt.tight_layout()
+plt.show()
+```
+
+
+```{python}
+#| echo: false
+#| label: chart-Causality_PC_ndhD
+#| fig-cap: Causal effects for the PC-model
+#| message: false
+#| warning: false
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+
+# Load data
+causal_relations = pd.read_csv("Tables_Causal_Inference/causal_relations_PC_ndhD.csv", index_col=0)
+strong_causal_relations = causal_relations.drop_duplicates(subset='Outcome (Y)', keep='first') # among the possible causes for the same 'Outcome(Y)' keep only the one with greatest AE
+ 
+adj_matrix = pd.read_csv("Tables_Causal_Inference/chron_AdjMatrix_PC_ndhD.csv", index_col=0)
+nodes = adj_matrix.columns
+adj_matrix = adj_matrix.astype(float)
+
+# Fill the adjacency matrix with the "Actual Effect" values for the corresponding arrows
+for _, row in strong_causal_relations.iterrows():
+    x = row['Cause (X)']
+    y = row['Outcome (Y)']
+    effect = row['Actual Effect']
+    adj_matrix.loc[x, y] = effect
+adj_matrix = adj_matrix.to_numpy()
+
+# Visualize with seaborn heatmap
+plt.figure(figsize=(50,50))
+
+ax_effects = sns.heatmap(adj_matrix, 
+                 annot=False,
+                 # annot_kws={"color": "#2AB013", "fontsize": 14, "fontweight": 'bold'},
+                 fmt=".2f", 
+                 cmap="flare",
+                 xticklabels=nodes, 
+                 yticklabels=nodes, 
+                 cbar=True)
+cbar = ax_effects.collections[0].colorbar
+cbar.ax.tick_params(labelsize=75)
+cbar.set_label("ACE", fontsize=80)
+
+ax_effects.set_xticklabels(nodes, rotation=90)
+ax_effects.set_yticklabels(nodes, rotation=0)
+ax_effects.xaxis.set_ticks_position('top')
+ax_effects.xaxis.set_label_position('top')
+ax_effects.tick_params(axis='both', labelsize=80)
+
+for x, row_label in enumerate(nodes):
+    for y, col_label in enumerate(nodes):
+        val = adj_matrix[x, y]
+
+        if val != 0:
+            ax_effects.text(y + 0.5, x + 0.5,
+                            f"{val:.2f}",
+                            ha='center', va='center',
+                            fontsize=75,
+                            color="white",
+                            # color="#2AB013",
+                            fontweight='bold')
+            
+plt.tight_layout()
+plt.show()
+```
+
+
+```{python}
+#| echo: false
+#| label: chart-Causality_LiNGAM_ndhD
+#| fig-cap: Causal effects for the LiNGAM-model
+#| message: False
+#| warning: false
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+
+# Load data
+causal_relations = pd.read_csv("Tables_Causal_Inference/causal_relations_LiNGAM_ndhD.csv", index_col=0)
+strong_causal_relations = causal_relations.drop_duplicates(subset='Outcome (Y)', keep='first') # among the possible causes for the same 'Outcome(Y)' keep only the one with greatest AE
+ 
+adj_matrix = pd.read_csv("Tables_Causal_Inference/chron_AdjMatrix_LiNGAM_ndhD.csv", index_col=0)
+nodes = adj_matrix.columns
+adj_matrix = adj_matrix.astype(float)
+
+# Fill the adjacency matrix with the "Actual Effect" values for the corresponding arrows
+for _, row in strong_causal_relations.iterrows():
+    x = row['Cause (X)']
+    y = row['Outcome (Y)']
+    effect = row['Actual Effect']
+    adj_matrix.loc[x, y] = effect
+adj_matrix = adj_matrix.to_numpy()
+
+# Visualize with seaborn heatmap
+plt.figure(figsize=(50,50))
+
+ax_effects = sns.heatmap(adj_matrix, 
+                 annot=False,
+                 # annot_kws={"color": "#2AB013", "fontsize": 14, "fontweight": 'bold'},
+                 fmt=".2f", 
+                 cmap="flare",
+                 xticklabels=nodes, 
+                 yticklabels=nodes, 
+                 cbar=True)
+cbar = ax_effects.collections[0].colorbar
+cbar.ax.tick_params(labelsize=75)
+cbar.set_label("ACE", fontsize=80)
+
+ax_effects.set_xticklabels(nodes, rotation=90)
+ax_effects.set_yticklabels(nodes, rotation=0)
+ax_effects.xaxis.set_ticks_position('top')
+ax_effects.xaxis.set_label_position('top')
+ax_effects.tick_params(axis='both', labelsize=80)
+
+for x, row_label in enumerate(nodes):
+    for y, col_label in enumerate(nodes):
+        val = adj_matrix[x, y]
+
+        if val != 0:
+            ax_effects.text(y + 0.5, x + 0.5,
+                            f"{val:.2f}",
+                            ha='center', va='center',
+                            fontsize=75,
+                            color="white",
+                            # color="#2AB013",
+                            fontweight='bold')
+            
+plt.tight_layout()
+plt.show()
+```
+
+
+```{python}
+#| echo: false
+#| label: chart-Causality_NOTEARS_ndhD
+#| fig-cap: Causal effects for the NOTEARS-model
+#| message: false
+#| warning: false
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+
+# Load data
+causal_relations = pd.read_csv("Tables_Causal_Inference/causal_relations_NOTEARS_ndhD.csv", index_col=0)
+strong_causal_relations = causal_relations.drop_duplicates(subset='Outcome (Y)', keep='first') # among the possible causes for the same 'Outcome(Y)' keep only the one with greatest AE
+ 
+adj_matrix = pd.read_csv("Tables_Causal_Inference/chron_AdjMatrix_NOTEARS_ndhD.csv", index_col=0)
+nodes = adj_matrix.columns
+adj_matrix = adj_matrix.astype(float)
+
+# Fill the adjacency matrix with the "Actual Effect" values for the corresponding arrows
+for _, row in strong_causal_relations.iterrows():
+    x = row['Cause (X)']
+    y = row['Outcome (Y)']
+    effect = row['Actual Effect']
+    adj_matrix.loc[x, y] = effect
+adj_matrix = adj_matrix.to_numpy()
+
+# Visualize with seaborn heatmap
+plt.figure(figsize=(50,50))
+
+ax_effects = sns.heatmap(adj_matrix, 
+                 annot=False,
+                 # annot_kws={"color": "#2AB013", "fontsize": 14, "fontweight": 'bold'},
+                 fmt=".2f", 
+                 cmap="flare",
+                 xticklabels=nodes, 
+                 yticklabels=nodes, 
+                 cbar=True)
+cbar = ax_effects.collections[0].colorbar
+cbar.ax.tick_params(labelsize=75)
+cbar.set_label("ACE", fontsize=80)
+
+ax_effects.set_xticklabels(nodes, rotation=90)
+ax_effects.set_yticklabels(nodes, rotation=0)
+ax_effects.xaxis.set_ticks_position('top')
+ax_effects.xaxis.set_label_position('top')
+ax_effects.tick_params(axis='both', labelsize=80)
+
+for x, row_label in enumerate(nodes):
+    for y, col_label in enumerate(nodes):
+        val = adj_matrix[x, y]
+
+        if val != 0:
+            ax_effects.text(y + 0.5, x + 0.5,
+                            f"{val:.2f}",
+                            ha='center', va='center',
+                            fontsize=75,
+                            color="white",
+                            # color="#2AB013",
+                            fontweight='bold')
+            
+plt.tight_layout()
+plt.show()
+```
+
+Causal relations for _ndhD_
+:::

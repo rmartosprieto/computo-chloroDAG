@@ -1,0 +1,18 @@
+,Cause (X),Outcome (Y),Total Effect (TE),Refutation TE_DataSubset,Refutation TE_RandCommCause,Refutation TE_Placebo
+0,ndhB_97016,ndhB_96579,0.4066002490659891,NA,NA,NA
+1,ndhB_96457,ndhB_96698,0.37327864443250547,NA,NA,NA
+2,ndhB_96579,ndhB_96419,0.3350465120776742,NA,NA,NA
+3,ndhB_95225,ndhB_94999,0.16385942840552414,NA,NA,NA
+4,ndhB_97016,ndhB_96419,0.175974133145276,"Refute: Use a subset of data
+Estimated effect:0.175974133145276
+New effect:0.1710480717737145
+p value:0.82
+","Refute: Add a random common cause
+Estimated effect:0.175974133145276
+New effect:0.17588489160190338
+p value:0.8
+","Refute: Use a Placebo Treatment
+Estimated effect:0.175974133145276
+New effect:0.0032727157540823016
+p value:0.78
+"

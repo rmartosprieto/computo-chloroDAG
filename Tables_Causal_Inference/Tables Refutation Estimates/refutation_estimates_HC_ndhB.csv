@@ -1,0 +1,284 @@
+,Cause (X),Outcome (Y),Total Effect (TE),Refutation TE_DataSubset,Refutation TE_RandCommCause,Refutation TE_Placebo
+0,ndhB_95608,ndhB_95644,0.5813493057991708,NA,NA,NA
+1,ndhB_95644,ndhB_95650,0.31611864198131323,NA,NA,NA
+2,ndhB_96579,ndhB_97016,0.26431376414110486,NA,NA,NA
+3,ndhB_95608,ndhB_95650,0.44768014970007025,"Refute: Use a subset of data
+Estimated effect:0.44768014970007025
+New effect:0.44933897390147864
+p value:0.8799999999999999
+","Refute: Add a random common cause
+Estimated effect:0.44768014970007025
+New effect:0.4476803036970105
+p value:0.96
+","Refute: Use a Placebo Treatment
+Estimated effect:0.44768014970007025
+New effect:-0.0010970882445206832
+p value:0.94
+"
+4,ndhB_95608,ndhB_94999,0.2253354050757549,"Refute: Use a subset of data
+Estimated effect:0.2253354050757549
+New effect:0.22324030499073275
+p value:0.88
+","Refute: Add a random common cause
+Estimated effect:0.2253354050757549
+New effect:0.22531722004183036
+p value:0.8799999999999999
+","Refute: Use a Placebo Treatment
+Estimated effect:0.2253354050757549
+New effect:-0.0009589801549700905
+p value:0.92
+"
+5,ndhB_95644,ndhB_96419,0.16004724409449522,NA,NA,NA
+6,ndhB_94999,ndhB_95225,0.15277915129697905,NA,NA,NA
+7,ndhB_95650,ndhB_94999,0.14895487700245214,NA,NA,NA
+8,ndhB_96419,ndhB_96579,0.14329760043673856,NA,NA,NA
+9,ndhB_95608,ndhB_95225,0.14532270729954078,"Refute: Use a subset of data
+Estimated effect:0.14532270729954078
+New effect:0.1432888295888073
+p value:0.86
+","Refute: Add a random common cause
+Estimated effect:0.14532270729954078
+New effect:0.1453291531386559
+p value:0.96
+","Refute: Use a Placebo Treatment
+Estimated effect:0.14532270729954078
+New effect:0.0009244074851695805
+p value:0.8999999999999999
+"
+10,ndhB_94999,ndhB_96698,0.12592697094511782,NA,NA,NA
+11,ndhB_95608,ndhB_96698,0.1567423520959584,"Refute: Use a subset of data
+Estimated effect:0.1567423520959584
+New effect:0.15777384032053987
+p value:0.8999999999999999
+","Refute: Add a random common cause
+Estimated effect:0.1567423520959584
+New effect:0.15674313553893707
+p value:1.0
+","Refute: Use a Placebo Treatment
+Estimated effect:0.1567423520959584
+New effect:0.003372280355125845
+p value:0.8200000000000001
+"
+12,ndhB_95650,ndhB_96698,0.09209094763795919,"Refute: Use a subset of data
+Estimated effect:0.09209094763795919
+New effect:0.09203687609989089
+p value:0.96
+","Refute: Add a random common cause
+Estimated effect:0.09209094763795919
+New effect:0.09218509257934779
+p value:0.8200000000000001
+","Refute: Use a Placebo Treatment
+Estimated effect:0.09209094763795919
+New effect:0.0026146799663740706
+p value:0.98
+"
+13,ndhB_95608,ndhB_96419,0.15871384892986895,"Refute: Use a subset of data
+Estimated effect:0.15871384892986895
+New effect:0.15909309158298346
+p value:1.0
+","Refute: Add a random common cause
+Estimated effect:0.15871384892986895
+New effect:0.1586770544248145
+p value:0.96
+","Refute: Use a Placebo Treatment
+Estimated effect:0.15871384892986895
+New effect:0.003231407523775721
+p value:0.78
+"
+14,ndhB_96579,ndhB_94622,0.06449803701626534,NA,NA,NA
+15,ndhB_95644,ndhB_96698,0.0901215924429204,"Refute: Use a subset of data
+Estimated effect:0.0901215924429204
+New effect:0.09127285919556073
+p value:0.8999999999999999
+","Refute: Add a random common cause
+Estimated effect:0.0901215924429204
+New effect:0.09008307855926902
+p value:0.82
+","Refute: Use a Placebo Treatment
+Estimated effect:0.0901215924429204
+New effect:-0.004826679995211274
+p value:0.8
+"
+16,ndhB_95608,ndhB_96579,0.07397290027232917,"Refute: Use a subset of data
+Estimated effect:0.07397290027232917
+New effect:0.07529316831294505
+p value:0.8999999999999999
+","Refute: Add a random common cause
+Estimated effect:0.07397290027232917
+New effect:0.0739963089404314
+p value:0.94
+","Refute: Use a Placebo Treatment
+Estimated effect:0.07397290027232917
+New effect:0.0007673020036768141
+p value:0.96
+"
+17,ndhB_96698,ndhB_96457,0.046463161912160156,NA,NA,NA
+18,ndhB_95608,ndhB_94622,0.04176900071842411,"Refute: Use a subset of data
+Estimated effect:0.04176900071842411
+New effect:0.04302366850064201
+p value:0.98
+","Refute: Add a random common cause
+Estimated effect:0.04176900071842411
+New effect:0.041840318226443705
+p value:0.8200000000000001
+","Refute: Use a Placebo Treatment
+Estimated effect:0.04176900071842411
+New effect:0.00029471327860235006
+p value:1.0
+"
+19,ndhB_95644,ndhB_96579,0.056797900262470224,"Refute: Use a subset of data
+Estimated effect:0.056797900262470224
+New effect:0.0580330461796736
+p value:0.8600000000000001
+","Refute: Add a random common cause
+Estimated effect:0.056797900262470224
+New effect:0.05681429902348027
+p value:0.98
+","Refute: Use a Placebo Treatment
+Estimated effect:0.056797900262470224
+New effect:-0.002197369193899723
+p value:0.86
+"
+20,ndhB_95644,ndhB_94622,0.03226246719160245,"Refute: Use a subset of data
+Estimated effect:0.03226246719160245
+New effect:0.033729380337470756
+p value:0.8
+","Refute: Add a random common cause
+Estimated effect:0.03226246719160245
+New effect:0.03224212554373157
+p value:1.0
+","Refute: Use a Placebo Treatment
+Estimated effect:0.03226246719160245
+New effect:5.142771000060178e-06
+p value:0.96
+"
+21,ndhB_95650,ndhB_95225,0.04916881310184196,"Refute: Use a subset of data
+Estimated effect:0.04916881310184196
+New effect:0.0493922533083424
+p value:0.8799999999999999
+","Refute: Add a random common cause
+Estimated effect:0.04916881310184196
+New effect:0.049174257383917806
+p value:0.9199999999999999
+","Refute: Use a Placebo Treatment
+Estimated effect:0.04916881310184196
+New effect:-0.001068928981702183
+p value:0.9
+"
+22,ndhB_96419,ndhB_94622,0.028859276905134713,"Refute: Use a subset of data
+Estimated effect:0.028859276905134713
+New effect:0.029330271600336088
+p value:0.96
+","Refute: Add a random common cause
+Estimated effect:0.028859276905134713
+New effect:0.0288974798676392
+p value:0.76
+","Refute: Use a Placebo Treatment
+Estimated effect:0.028859276905134713
+New effect:0.00031687390177773583
+p value:1.0
+"
+23,ndhB_95644,ndhB_96457,0.02124020111971584,"Refute: Use a subset of data
+Estimated effect:0.02124020111971584
+New effect:0.021355757549886455
+p value:0.94
+","Refute: Add a random common cause
+Estimated effect:0.02124020111971584
+New effect:0.021224162893368405
+p value:0.96
+","Refute: Use a Placebo Treatment
+Estimated effect:0.02124020111971584
+New effect:0.0004419254073492444
+p value:0.96
+"
+24,ndhB_95650,ndhB_97016,0.01647649232141868,"Refute: Use a subset of data
+Estimated effect:0.01647649232141868
+New effect:0.017506700722640222
+p value:0.78
+","Refute: Add a random common cause
+Estimated effect:0.01647649232141868
+New effect:0.016487782344354468
+p value:0.96
+","Refute: Use a Placebo Treatment
+Estimated effect:0.01647649232141868
+New effect:-0.00023664178301926575
+p value:0.96
+"
+25,ndhB_95608,ndhB_97016,0.0148697642557587,"Refute: Use a subset of data
+Estimated effect:0.0148697642557587
+New effect:0.013917019958387034
+p value:0.9199999999999999
+","Refute: Add a random common cause
+Estimated effect:0.0148697642557587
+New effect:0.014862270211323279
+p value:0.96
+","Refute: Use a Placebo Treatment
+Estimated effect:0.0148697642557587
+New effect:-0.0004759932720843385
+p value:0.98
+"
+26,ndhB_95644,ndhB_94999,0.06112690519808839,"Refute: Use a subset of data
+Estimated effect:0.06112690519808839
+New effect:0.06166300071340467
+p value:0.96
+","Refute: Add a random common cause
+Estimated effect:0.06112690519808839
+New effect:0.061148039070538666
+p value:1.0
+","Refute: Use a Placebo Treatment
+Estimated effect:0.06112690519808839
+New effect:-0.0001699877983139586
+p value:0.98
+"
+27,ndhB_96419,ndhB_97016,0.05006093893869801,"Refute: Use a subset of data
+Estimated effect:0.05006093893869801
+New effect:0.050637130358289165
+p value:0.8799999999999999
+","Refute: Add a random common cause
+Estimated effect:0.05006093893869801
+New effect:0.050055043469901674
+p value:1.0
+","Refute: Use a Placebo Treatment
+Estimated effect:0.05006093893869801
+New effect:-0.0010422802413890808
+p value:0.92
+"
+28,ndhB_95650,ndhB_96457,0.00586716341824833,"Refute: Use a subset of data
+Estimated effect:0.00586716341824833
+New effect:0.004833617184032308
+p value:0.66
+","Refute: Add a random common cause
+Estimated effect:0.00586716341824833
+New effect:0.005878248577468765
+p value:0.84
+","Refute: Use a Placebo Treatment
+Estimated effect:0.00586716341824833
+New effect:-0.0008782863191922999
+p value:0.92
+"
+29,ndhB_95608,ndhB_96457,0.007860925935207408,"Refute: Use a subset of data
+Estimated effect:0.007860925935207408
+New effect:0.008613437537126794
+p value:0.94
+","Refute: Add a random common cause
+Estimated effect:0.007860925935207408
+New effect:0.007857114207183278
+p value:0.94
+","Refute: Use a Placebo Treatment
+Estimated effect:0.007860925935207408
+New effect:-0.0006146460009945856
+p value:0.98
+"
+30,ndhB_95644,ndhB_95225,0.0064704478236010665,"Refute: Use a subset of data
+Estimated effect:0.0064704478236010665
+New effect:0.006616200589389372
+p value:0.8799999999999999
+","Refute: Add a random common cause
+Estimated effect:0.0064704478236010665
+New effect:0.006446040830653698
+p value:0.84
+","Refute: Use a Placebo Treatment
+Estimated effect:0.0064704478236010665
+New effect:-0.0007203691098432185
+p value:0.96
+"

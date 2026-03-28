@@ -30,6 +30,10 @@ logo_text_white.pdf
 logo_notext_white.png
 
 # Quarto output files
+submission-chloroDAG.html
+submission-chloroDAG.pdf
+submission-chloroDAG.ipynb
+submission-chloroDAG.tex
 template-computo-R.html
 template-computo-R.pdf
 template-computo-python.html
@@ -47,5 +51,6 @@ template-computo-julia.tex
 
 # Various system files
 DS_Store
+**/.DS_Store
 /.luarc.json
 

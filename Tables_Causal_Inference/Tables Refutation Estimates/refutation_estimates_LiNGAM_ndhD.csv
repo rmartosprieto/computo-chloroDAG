@@ -1,0 +1,57 @@
+,Cause (X),Outcome (Y),Total Effect (TE),Refutation TE_DataSubset,Refutation TE_RandCommCause,Refutation TE_Placebo
+0,ndhD_116281,ndhD_116290,0.5323191475659442,NA,NA,NA
+1,ndhD_116785,ndhD_116281,0.41597582114753845,NA,NA,NA
+2,ndhD_116785,ndhD_116494,0.3232838010168906,"Refute: Use a subset of data
+Estimated effect:0.3232838010168906
+New effect:0.32590735147044503
+p value:0.8400000000000001
+","Refute: Add a random common cause
+Estimated effect:0.3232838010168906
+New effect:0.32328134603713915
+p value:0.8999999999999999
+","Refute: Use a Placebo Treatment
+Estimated effect:0.3232838010168906
+New effect:-0.00037317740406222154
+p value:0.94
+"
+3,ndhD_116290,ndhD_116494,0.1864321554355437,NA,NA,NA
+4,ndhD_116785,ndhD_116290,0.38407279760956037,"Refute: Use a subset of data
+Estimated effect:0.38407279760956037
+New effect:0.3831203226368634
+p value:0.86
+","Refute: Add a random common cause
+Estimated effect:0.38407279760956037
+New effect:0.3840673210275397
+p value:0.9
+","Refute: Use a Placebo Treatment
+Estimated effect:0.38407279760956037
+New effect:0.0013782420291114394
+p value:0.8400000000000001
+"
+5,ndhD_116281,ndhD_116494,0.2272412581982226,"Refute: Use a subset of data
+Estimated effect:0.2272412581982226
+New effect:0.22665626214877124
+p value:0.94
+","Refute: Add a random common cause
+Estimated effect:0.2272412581982226
+New effect:0.22724570311416512
+p value:0.98
+","Refute: Use a Placebo Treatment
+Estimated effect:0.2272412581982226
+New effect:3.253365776578754e-07
+p value:0.8999999999999999
+"
+6,ndhD_117166,ndhD_116290,0.055029476530989,NA,NA,NA
+7,ndhD_117166,ndhD_116494,0.026098480111472977,"Refute: Use a subset of data
+Estimated effect:0.026098480111472977
+New effect:0.02630701206699543
+p value:0.8400000000000001
+","Refute: Add a random common cause
+Estimated effect:0.026098480111472977
+New effect:0.02609495806820556
+p value:0.98
+","Refute: Use a Placebo Treatment
+Estimated effect:0.026098480111472977
+New effect:0.0006125120089505199
+p value:0.98
+"

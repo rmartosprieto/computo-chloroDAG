@@ -1,0 +1,59 @@
+,Cause (X),Outcome (Y),Total Effect (TE),Refutation TE_DataSubset,Refutation TE_RandCommCause,Refutation TE_Placebo
+0,ndhB_95650,ndhB_95644,0.6459229466786082,NA,NA,NA
+1,ndhB_96579,ndhB_96698,0.5996480167095457,NA,NA,NA
+2,ndhB_95608,ndhB_95650,0.44768014970007025,NA,NA,NA
+3,ndhB_94622,ndhB_94999,0.31701627254448717,NA,NA,NA
+4,ndhB_95608,ndhB_95644,0.5813493057991708,"Refute: Use a subset of data
+Estimated effect:0.5813493057991708
+New effect:0.5796062324049281
+p value:0.88
+","Refute: Add a random common cause
+Estimated effect:0.5813493057991708
+New effect:0.5814226547979549
+p value:0.96
+","Refute: Use a Placebo Treatment
+Estimated effect:0.5813493057991708
+New effect:0.0006289104165300474
+p value:0.9199999999999999
+"
+5,ndhB_96698,ndhB_97016,0.29125621478290153,NA,NA,NA
+6,ndhB_97016,ndhB_94999,0.25042137174259665,NA,NA,NA
+7,ndhB_96579,ndhB_94999,0.26231704074013007,"Refute: Use a subset of data
+Estimated effect:0.26231704074013007
+New effect:0.2622148224590834
+p value:1.0
+","Refute: Add a random common cause
+Estimated effect:0.26231704074013007
+New effect:0.26235359254587004
+p value:0.92
+","Refute: Use a Placebo Treatment
+Estimated effect:0.26231704074013007
+New effect:-0.0038479057559871878
+p value:0.8
+"
+8,ndhB_96698,ndhB_94999,0.26327353068715786,"Refute: Use a subset of data
+Estimated effect:0.26327353068715786
+New effect:0.26099280994272545
+p value:0.82
+","Refute: Add a random common cause
+Estimated effect:0.26327353068715786
+New effect:0.2632017417897131
+p value:0.98
+","Refute: Use a Placebo Treatment
+Estimated effect:0.26327353068715786
+New effect:-0.0017356527837201108
+p value:1.0
+"
+9,ndhB_96579,ndhB_97016,0.26204865878895056,"Refute: Use a subset of data
+Estimated effect:0.26204865878895056
+New effect:0.2603465243474517
+p value:0.92
+","Refute: Add a random common cause
+Estimated effect:0.26204865878895056
+New effect:0.26204287725316555
+p value:0.8200000000000001
+","Refute: Use a Placebo Treatment
+Estimated effect:0.26204865878895056
+New effect:-0.00031154787624403937
+p value:0.94
+"
