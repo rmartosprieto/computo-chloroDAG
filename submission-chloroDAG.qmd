@@ -2,7 +2,7 @@
 
 Transcriptomic regulation in chloroplasts involves a cascade of maturation events—transcript initiation, processing, splicing, trimming, and decay—that unfold over time. Long‑read sequencing data now make it possible to observe these events in full transcripts, offering a unique opportunity to study their dependencies and to reconstruct their chronological and possibly causal relationships [@Long_Reads_GuilcherEtAl]. 
 
-Our main contribution in this paper is to provide a **causal inference framework** to order post‑transcriptional regulation events from long‑read sequencing data in *Arabidopsis thaliana*. In particular, we focus on the maturation of two chloroplast genes, *ndhB* and *ndhD*. These datasets provide rich ground for causal analysis: multiple post‑transcriptional events, block‑structured missing observations, and rare but biologically meaningful occurrences.
+Our main contribution in this paper is to provide a **new framework for chronological ordering based on causal inference** to order post‑transcriptional regulation events from long‑read sequencing data in *Arabidopsis thaliana*. In particular, we focus on the maturation of two chloroplast genes, *ndhB* and *ndhD*. These datasets provide rich ground for causal analysis: multiple post‑transcriptional events, block‑structured missing observations, and rare but biologically meaningful occurrences.
 
 The reference work of Guilcher *et al.* [@Long_Reads_GuilcherEtAl] proposed a chronological ordering based on a  deterministic principle: the more often a regulation event is observed alone, that is without others, the earlier it occured. We argue that this principle essentially assume that the sequence of regulation events is deterministic: a maturation event strictly depends on its predecessors: it is triggered by them and cannot occur otherwise. This does not align with the causal and probabilistic framework of Pearl, where rare events can still exert strong causal influence and probabilistically some events can still happen without their causal predecessors occurring. Consequently, our approach departs from frequency‑based ordering and instead builds on Bayesian networks and Pearl’s structural causal models.
 
@@ -11,7 +11,7 @@ Our method proceeds in three stages:
 2. **Causal inference**: estimating causal effects via do‑calculus and counterfactual reasoning. Missing data are handled via an EM algorithm that jointly imputes missing values and estimates the Bayesian network.
 3. **Chronology construction**: translating estimated causal effects into maturation timeline models, yielding hypotheses about how perturbations (e.g., blocking a processing step) shift downstream events.
 
-We show that this causal‑chronology approach produces timelines that often differ substantially from the reference order in [@Long_Reads_GuilcherEtAl], and that it provides better fit, stability, and interpretability. Beyond improving chronology reconstruction, our framework allows “what if” questions and guides the design of targeted perturbation experiments in *Arabidopsis thaliana*.
+We show that this causal‑chronology approach produces timelines that often differ substantially from the reference order in [@Long_Reads_GuilcherEtAl], that it provides a better fit for *ndhD* while remaining competitive for *ndhB*, and that it improves interpretability. Beyond improving chronology reconstruction, our framework allows “what if” questions and guides the design of targeted perturbation experiments in *Arabidopsis thaliana*.
 
 # Related work {#sec-related-work}
 
@@ -19,39 +19,31 @@ We show that this causal‑chronology approach produces timelines that often dif
 
 Early computational approaches to gene regulatory network (GRN) inference relied heavily on classical statistical and machine learning techniques designed to extract dependencies from large-scale gene expression data. A widely used family of methods is based on *information theory*, particularly mutual information (MI), which quantifies statistical dependencies between gene expression profiles. Algorithms such as **ARACNE** (Algorithm for the Reconstruction of Accurate Cellular Networks) apply MI combined with the data processing inequality to prune indirect associations, thereby yielding clearer networks [@Margolin2006]. Extensions like **CLR** (Context Likelihood of Relatedness) [@Faith2007] and **MRNET** [@Meyer2008_minet] further refine this principle by contextualizing MI scores or reducing redundancy among inferred interactions.  
 
-Another influential line of work exploits *tree-based ensemble methods*, most notably **GENIE3**, which decomposes the problem into regression tasks where each gene’s expression is predicted from all others using Random Forests or Extra-Trees [@HuynhThu2010]. GENIE3 and its variants consistently rank highly in community benchmarks such as DREAM challenges, and they established machine learning as a reference framework for GRN inference. Complementary classical models include **Bayesian networks** [@Friedman2000], which encode conditional dependencies in a probabilistic graphical framework, and **structural equation models** (SEMs) [@Pearl2009], which leverage linear relations between variables while enforcing acyclicity constraints. These methods laid the groundwork for later developments in causal discovery and deep learning.  
+Another influential line of work exploits *tree-based ensemble methods*, most notably **GENIE3**, which decomposes the problem into regression tasks where each gene’s expression is predicted from all others using Random Forests or Extra-Trees [@HuynhThu2010]. GENIE3 and its variants consistently rank highly in community benchmarks such as DREAM challenges, and they established machine learning as a reference framework for GRN inference. Complementary classical models include **Bayesian networks** [@Friedman2000], which encode conditional dependencies in a probabilistic graphical framework, and **structural equation models** (SEMs) [@Pearl2009], which leverage linear relations between variables while enforcing acyclicity constraints. These methods laid the groundwork for later developments in causal discovery and deep learning. Unlike our framework, these classical approaches were primarily developed for network or dependency inference and do not explicitly use causal discovery to recover a chronological ordering of regulatory events.
 
 ## Temporal Data and Dynamic GRN Inference  
 
 While static methods infer regulatory interactions from steady-state or aggregated expression measurements, many biological processes unfold dynamically. To capture this temporal dimension, classical extensions of GRN inference integrate *time-series data*. For example, **dynGENIE3** extends the Random Forest-based GENIE3 by embedding regulatory effects in *ordinary differential equations* (ODEs), enabling simultaneous modeling of steady-state and temporal expression patterns [@HuynhThuGeurts2018]. Other approaches utilize *dynamic Bayesian networks* (DBNs) [@Murphy2002DBN], which explicitly model temporal dependencies and can infer time-lagged interactions. Techniques such as **SINCERITIES** [@PapiliGao2018SINCERITIES] infers directed and signed gene‐regulatory edges by regressing each gene’s expression on candidate regulators across time‐stamped single‐cell data, incorporating statistical distances (e.g. Kolmogorov–Smirnov) between distributions at successive time points to capture dynamics. More recently **GRNBoost2** [@Moerman2019GRNBoost2]  applies efficient gradient boosting regressors, where regulator–target interactions are ranked via feature importance in boosted decision trees.
 
-
 These temporal frameworks are particularly relevant to the analysis of *full-length transcriptome datasets*, such as those generated by nanopore sequencing of plastid RNAs in *Arabidopsis thaliana* [@Guilcher2025]. In this setting, the order and co-occurrence of post-transcriptional maturation events are not merely static associations but dynamic processes unfolding over time.  This makes temporal GRN inference a crucial methodological bridge between raw sequencing data and interpretable models of chloroplast gene regulation.  
-
 
 ## Causality and GRN Inference  
 
 A central limitation of both static and temporal GRN inference methods is that they often rely on correlations or statistical dependencies, which do not necessarily imply causation. To support biological interpretation and experimental design, it is essential not only to infer structure, but also to reason about what would happen under perturbations. Causal discovery provides a principled framework that integrates graphical models, do-calculus, and structural equation modeling, thereby enabling the formal characterization of interventions and counterfactual reasoning (i.e. what would expression look like if we force a regulator on or off) [@CausalityBook_Pearl]. For example, LiNGAM exploits non-Gaussianity to orient edges; PC and HC use conditional independence tests to recover causal structure; and NOTEARS [@DagsNotears] frames DAG learning as continuous optimization while preserving acyclicity, making it more amenable to counterfactual queries. These causal approaches provide a principled route beyond correlation-based GRNs—allowing not only inference of regulatory architecture, but simulation of interventions and estimation of causal effect—for instance, predicting how blocking or activating a transcript processing event may shift downstream maturation timelines, a perspective directly relevant in the full-length transcriptome context of *Arabidopsis thaliana*.
 
-
-
-
-
 # A Causal Perspective on Maturation Timelines {#sec-frameworks}
 
 ## Dataset: Transcriptional Maturation Timelines in *Arabidopsis thaliana* {#sec-dataset}
 
-
-Our case study focuses on full-length transcriptome datasets describing the post-transcriptional maturation of two chloroplast genes in *Arabidopsis thaliana*, ***ndhB*** and ***ndhD*** @Long_Reads_GuilcherEtAl. Each dataset records for each sequencing read the presence or absence of specific maturation events, such as RNA editing or splicing, encoded as binary random variables ($1 =$ observed, $0 =$ not observed). Errors introduced by nanopore sequencing are treated as unobserved events and assigned the value $0$ during pre-processing. The *ndhB* dataset comprises 1 899 observations (or reads), of which only 117 are fully observed, and includes 12 distinct maturation events. Missing values are present in most reads and typically appear as contiguous blocks rather than isolated sites. In comparison, the *ndhD* dataset contains 7 752 observations with 930 fully observed, and involves 5 maturation events. Its missing values follow a similar block structure to those of *ndhB*. A glimpse of the untreated datasets is provided in [@tbl-glimpse_data].
-
+Our case study focuses on full-length transcriptome datasets describing the post-transcriptional maturation of two chloroplast genes in *Arabidopsis thaliana*, ***ndhB*** and ***ndhD*** [@Long_Reads_GuilcherEtAl]. Each dataset records for each sequencing read the presence or absence of specific maturation events, such as RNA editing or splicing, encoded as binary random variables ($1 =$ observed, $0 =$ not observed). Errors introduced by nanopore sequencing are treated as unobserved events and assigned the value $0$ during pre-processing. The *ndhB* dataset comprises 1 899 observations (or reads), of which only 117 are fully observed, and includes 12 distinct maturation events. Missing values are present in most reads and typically appear as contiguous blocks rather than isolated sites. In comparison, the *ndhD* dataset contains 7 752 observations with 930 fully observed, and involves 5 maturation events. Its missing values follow a similar block structure to those of *ndhB*. A glimpse of the untreated datasets is provided in [@tbl-glimpse_data].
 
 The distribution of missing values makes it impractical to restrict the joint analyses of all events to fully observed reads, as this would drastically reduce the sample size (to 117 for *ndhB* and 930 for *ndhD*).  
 Instead, imputation strategies are required to exploit the full dataset. Furthermore, the block-structured nature of missingness suggests systematic sequencing coverage gaps rather than random dropout, which must be considered when designing statistical models.
 
-
 These datasets provide a rich ground for causal discovery: the binary encoding of maturation events is well suited for Bayesian network learning, while the relatively high number of observations allows for robust estimation despite missing data.
 
 ::: {#tbl-glimpse_data fig-pos="H" layout-nrow=2}
+
 ```{python}
 #| label: tbl-glimpse_ndhB
 #| tbl-cap: "_ndhB_. The editing events are defined in terms of their genomic sites: ed1 = 94622, ed2 = 94999, ed3 = 95225, ed4 = 95608, ed5 = 95644, ed6 = 95650, ed7 = 96419, ed8 = 96439, ed9 = 96457, ed10 = 96579, ed11 = 96698, ed12 = 97016."
@@ -81,14 +73,31 @@ data.sample(n=5)
 Untreated working datasets
 :::
 
-
 ## From Frequency-Based to Causal Chronologies {#sec-paradigm-shift}
 
-The primary objective of this study is to infer a chronology of post-transcriptional maturation events for the *ndhB* and *ndhD* genes in *Arabidopsis thaliana*. A chronology here refers to a directed acyclic graph (DAG) where nodes represent maturation events and directed edges indicate temporal precedence (i.e. if there is an arrow from event $A$ to event $B$, then $A$ occurs before $B$ in the maturation timeline).
+### The Graphical Framework
 
-The postulate that guides the argument in @Long_Reads_GuilcherEtAl for proposing a chronology of maturation events is the following: _the more often an event occurs (or is observed) without others, the sooner it is the maturation timeline_.
+The primary objective of this study is to infer a chronology of post-transcriptional maturation events for the ndhB and ndhD genes in Arabidopsis thaliana. We represent the inferred chronology as a causal directed acyclic graph (DAG), where nodes represent maturation events and directed edges indicate temporal precedence (i.e., if there is an arrow from event $A$ to event $B$, then $A$ occurs before $B$ in the maturation timeline). This interpretation differs from the standard interpretation of a causal DAG, in which a directed edge $A \rightarrow B$ represents a causal effect of $A$ on $B$, rather than temporal precedence per se. In our framework, we assume that each variable corresponds to a single maturation event occurring at a single time point, so that the maturation events admit a complete temporal ordering. We further assume that this temporal ordering is consistent across samples. Under these assumptions, causal relations must respect the temporal order, and the resulting causal graph is necessarily acyclic. Thus, the acyclicity of the DAG is justified by the underlying temporal order rather than being imposed as an independent structural assumption, in line with the notion of _time-acyclicity_ introduced by Reisach et al. in [@Time_DAGs_ReisachEtAl].
 
-Let us briefly summarize the pipeline elaborated in @Long_Reads_GuilcherEtAl to infer such a chronology starting from this assumption. According to the working dataset, the maturation events are viewed as random variables that can take binary values: $1$ if the event has been observed during the post-transcriptional maturation process, $0$ otherwise. 
+In other words, the causal ordering identified by causal discovery is consistent with the underlying temporal ordering of these events. We therefore use the causal ordering inferred from the DAG as a proxy for their chronological ordering.
+
+::: {#rem-chron_causality}
+It is apparent that there is a close relationship between _chronology_ and _causality_. Indeed, if $B$ occurs before $A$, then $A$ is definitely not a cause of $B$. In other words, causality entails a temporal order.
+
+More specifically, a DAG induces a partial order on its nodes. Whenever there exists a directed path from $A$ to $B$, the DAG induces the precedence relation $A\prec B$. Acyclicity ensures that these precedence relations are consistent with a partial order (pairs of nodes that are not connected by a directed path need not be ordered by the DAG). A topological ordering provides a linear extension of this partial order, but such an ordering is not necessarily unique. Thus, although the underlying maturation events are assumed to admit a complete and sample-consistent temporal ordering, the DAG learned from observational data generally constrains only a subset of the corresponding precedence relations and therefore does not, in general, determine a unique complete chronology. To obtain a more concise and interpretable chronological representation from this partial ordering, causal discovery is complemented by a causal inference analysis (cf. [@sec-pipeline]).
+:::
+
+Our causal discovery framework relies on the standard **Causal Markov condition** and **Faithfulness** assumptions.
+
+The Causal Markov condition states that each variable is conditionally independent of its non-descendants given its parents in the underlying causal DAG. Consequently, the conditional independencies encoded by the DAG are also reflected in the joint probability distribution of the observed variables. Conversely, the Faithfulness assumption states that all conditional independencies present in the observed distribution are implied by the graphical structure of the DAG. In particular, it rules out conditional independencies arising from parameter cancellations that are not entailed by the graph.
+
+Together, these assumptions establish the correspondence between the conditional independence structure of the data and the graphical structure targeted by causal discovery, thereby supporting the interpretation of the learned structure as a causal model under the additional assumptions required by each discovery method (these will be specified in [@sec-pipeline]).
+
+### Deterministic vs. Probabilistic Principles
+
+The postulate that guides the argument in [@Long_Reads_GuilcherEtAl] for proposing a chronology of maturation events is the following: _the more often an event occurs (or is observed) without others, the sooner it is the maturation timeline_.
+
+Let us briefly summarize the pipeline elaborated in [@Long_Reads_GuilcherEtAl] to infer such a chronology starting from this assumption. According to the working dataset, the maturation events are viewed as random variables that can take binary values: $1$ if the event has been observed during the post-transcriptional maturation process, $0$ otherwise. 
 
 __Dependence discovery__. The first step consists in carrying out statistical pairwise dependence tests[^stat_dep_tests] in order to find out the actual dependencies between all possible couples of maturation events. In this step, we obtain an edge $A - B$ between two maturation events $A$ and $B$ if they are declared statisticaly dependent (adjusted p-value less than a pre-specified treshold). Note that by the end of this procedure  an undirected graph is obtained.
 
@@ -103,8 +112,7 @@ __Temporal order decision__. Next, in order to decide whether regulation $A$ occ
 
 Note that by the end of this procedure  a directed graph without cycles (i.e. a _DAG_) is produced.
 
-__Chronology representation__. Finally, we must account for two particular situations. First, the analysis does not always yield a complete chronological order: ambiguities may arise when determining the temporal relationship between two events. In such cases, we consider these events to occur simultaneously. Second, some maturation events occur independently of all others. These are either excluded from the chronology or represented in the DAG as isolated nodes.
-
+__Chronology representation__. Finally, we must account for two particular situations. First, the inferred chronology generally defines a partial rather than a complete temporal ordering, as a causal DAG encodes a partial order: some pairs of maturation events may remain unordered because their temporal relationship cannot be determined from the available data. This is consistent with the chronology reported by [@Long_Reads_GuilcherEtAl], where some maturation events are described as occurring concurrently, with no preferential ordering between them. In our framework, we represent such unresolved temporal relationships as simultaneous events. This simultaneity is therefore an explicit modelling assumption of our framework and should not be understood as a general property of causal DAGs. Second, some maturation events may occur independently of all others. These events are either excluded from the chronology or represented in the DAG as isolated nodes.
 
 By way of example, [@fig-ndhD-analysis] shows the complete analysis workflow for _ndhD_ obtained in [@Long_Reads_GuilcherEtAl]. [@fig-ndhD-analysis-a] displays the dependencies network between different maturation events, while [@fig-ndhD-analysis-b] presents the final maturation timeline in its DAG form.
 
@@ -117,9 +125,6 @@ By way of example, [@fig-ndhD-analysis] shows the complete analysis workflow for
 Analysis of genetic regulation for _ndhD_ from @Long_Reads_GuilcherEtAl: (a) statistical dependencies between maturation events, and (b) resulting directed acyclic graph representing the maturation timeline based on frequency ordering.
 :::
 
-
-
-
 The previous conception is based on a determinist viewpoint, 
  commonly shared in the biological community: _a maturation event strictly depends on its predecessors: it is triggered by them and cannot occur otherwise_. However, we know by now that the interactions between different maturation events can be much more complex and intricate than that (cf. [@Heterologous_SchmitzEtAl], [@LarchMito_MarechalEtAl]. [@ChloroCP31A_TillichEtAl], [@SiteSelective_KarcherBock], [@CisElements_TakenakaNeuwirtBrennicke]).
 
@@ -127,11 +132,9 @@ In this sense, our approach represents a paradigm shift based on the following t
 
 A biological explanation for this phenomenon relates to the speed at which events occur. Assume for example, that event $A$ strongly or rapidly promotes event $B$, then $B$ will quickly follow $A$, so $A$ will rarely be observed alone. If we further assume that $B$ can occur (for some small probability) without $A$ and $B$ does not promote $A$, then $B$ will often be observed without $A$. In this scenario $A$ is the cause of $B$, yet using the deterministic viewpoint we would conclude otherwise.
 
-
 Such circumstances can indeed be observed within the working dataset. Namely, generating the frequency table of all five possible outcomes for *ndhD*, one can find instances of this phenomenon. Specifically, [@tbl-contigency_ed40_ed41] shows the contingency matrix for the pair of maturation events located at the genomic sites 116494 and 116785. Let $A:= \text{ndhD\_116494}$ and $B:= \text{ndhD\_116785}$. We observe that ndhD\_116494 appears much less frequently alone than ndhD\_116785. According to the deterministic postulate, this would suggest an arrow $\text{ndhD\_116785}\longrightarrow \text{ndhD\_116494}$, as shown in [@fig-ndhD-analysis-b]. However, the causal Hill-Climbing model (HC-model, @TeyssierKoller2005), for example, proposes the reverse direction, $\text{ndhD\_116494}\longrightarrow \text{ndhD\_116785}$, as seen in [@fig-causal_HCmodel_chron_ndhD][^Ex_arrow_causals].
 
 [^Ex_arrow_causals]: In fact, most of our causal models propose this arrow (see [@fig-cross_analysis_ndhD]).
-
 
 ```{python}
 #| label: tbl-contigency_ed40_ed41
@@ -150,7 +153,6 @@ contingency = pd.DataFrame(
 contingency
 ```
 
-
 As we will see in [@sec-chloro], some of the proposed models even yield a reversed chronology compared to the one proposed in [@Long_Reads_GuilcherEtAl]. The causal HC-model again serves as an example: the path $\text{ndhD\_116290}\longrightarrow\text{ndhD\_116494}\longrightarrow \text{ndhD\_116785}$ from [@fig-causal_HCmodel_chron_ndhD] reflects a reversed timeline relative to that proposed by the reference model in [@fig-ndhD-analysis-b].
 
 Moreover, the frequency table allows the following counts:
@@ -163,41 +165,53 @@ In other words, the event ndhD\_116290 strongly promotes ndhD\_116494, so it is 
 
 ![Causal HC-model for maturation chronology for _ndhD_](Figures_Causal_Chronology/chron_DAG_HC_ndhD.png){#fig-causal_HCmodel_chron_ndhD fig-pos="H" width=300 .lightbox}
 
+### The Proposed Causal-Chronology Pipeline {#sec-pipeline}
 
 More formally, the deterministic postulate relies on a connection between the phenomenon $\Big(\text{$A$ is the cause of $B$}\Big)$ and the phenomenon $\Big(\text{$A$ is observed alone more often than $B$ alone}\Big)$. However, from a probabilistic point of view, it is clear that the second phenomenon does not allow to conclude any causal effect of $A$ on $B$. Therefore, our paradigm shift consists in adopting a probabilistic approach to the problem by directly computing $P(A\Rightarrow B)$. The mathematical framework for this is the causal inference theory in terms of _do-calculus_ developped by J. Pearl (cf. [@CausalityPaper_Pearl; @CausalityBook_Pearl]).
 
 ::: {#def-CausalEffect}
-We say that $A$ has a causal effect on $B$ if $$P(B=1\ |\ \text{do($A=1$)}) > P(B=1\ |\ \text{do($A=0$)}).$$
+We say that $A$ has a causal effect on $B$ if $$P(B=1\ |\ \mathrm{do}(A=1)) > P(B=1\ |\ \mathrm{do}(A=0)).$$
 
-We put $P(A\Rightarrow B):= P(B=1\ |\ \text{do($A=1$)})$ and $P(\overline{A}\Rightarrow B):= P(B=1\ |\ \text{do($A=0$)})$.
+We put $P(A\Rightarrow B):= P(B=1\ |\ \mathrm{do}(A=1))$ and $P(\overline{A}\Rightarrow B):= P(B=1\ |\ \mathrm{do}(A=0))$.
 :::
 
-::: {#rem-chron_causality}
-It is apparent that there is a close relationship between _chronology_ and _causality_. Indeed, if $B$ occurs before $A$, then $A$ is definitely not a cause of $B$. In other words, causality entails a temporal order, hence a chronology.
+::: {#rem-DefCausation}
+The criterion in [@def-CausalEffect] should be distinguished from the general notion of causal effect in Pearl's intervention-based framework. In Pearl's formulation, the causal effect of $A$ on $B$ is characterized by the post-intervention distribution $P(B\ |\ \mathrm{do}(A=a))$, whereas [@def-CausalEffect] imposes the additional condition that the probability of $B=1$ increases when $A$ is set from $0$ to $1$. Thus, our definition specifically characterizes a positive causal effect for binary events rather than causal effect in its most general sense.
+
+The criterion is conceptually related to the _probability-raising_ idea underlying Suppes' notion of _prima facie causation_ (cf. @Prima_Facie_SuppesBook). However, there is an important distinction: Suppes' criterion is formulated in terms of observational conditional probabilities and temporal precedence, whereas [@def-CausalEffect] compares probabilities under interventions using Pearl's $\mathrm{do}(\cdot)$ operator. Our criterion can therefore be viewed as an interventional probability-raising criterion.
 :::
 
 To conclude this section, we summarize the proposed pipeline within our probabilistic framework, which is implemented and illustrated in [@sec-chloro].
 
-1. __Causal discovery__. The first step is to infer a Directed Acyclic Graph (DAG) directly from the working dataset. We apply several well‑known methods: Hill Climbing (HC, @TeyssierKoller2005), Peter‑Clark (PC, @spirtes1993causation), LiNGAM @shimizu2006linear; and more recent continuous optimization variants such as NOTEARS @DagsNotears. This step involves both unconditional (statistical) dependence tests and conditional dependence tests, in order to establish directed edges between pairs of events in accordance with the observed data [^initial_DAG].
+1. __Causal discovery__. The first step is to infer a causal graph directly from the working dataset. We apply several well‑known methods based on complementary learning principles: Hill Climbing (HC, @TeyssierKoller2005), Peter‑Clark (PC, @spirtes1993causation), LiNGAM @shimizu2006linear; and more recent continuous optimization variants such as NOTEARS @DagsNotears. These methods differ in how they exploit the statistical structure of the data in order to establish directed edges between pairs of events: HC performs score-based structure optimization, PC relies on conditional independence tests, LiNGAM exploits linearity and non-Gaussianity through independent component analysis, and NOTEARS formulates structure learning as a continuous optimization problem subject to an acyclicity constraint.
 
-[^initial_DAG]: This initial DAG contains a complex network of _all_ possible (directed) interdependencies between different events.
+    These methods require specific assumptions to determine the statistical model under which each algorithm learns the causal structure. These assumptions should therefore be taken into account when interpreting the resulting causal graphs:
 
-2. __Causal inference__. The first step yields a directed edge between two events, say $A\rightarrow B$. This suggests that $A$ is a potential cause of $B$, though it may nevertheless happen that $B$ occurs without $A$. To decide whether $A$ is an actual cause of $B$, we perform a causal inference analysis: isolating the causal effect; identifying and adjusting for confounders; and, when possible, designing interventions or applying graphical criteria such as the _backdoor criterion_ to ensure that any spurious associations are removed.
+    a) __HC__. We use the `HillClimbSearch` implementation of `pgmpy` (cf. [@pgmpyLibrary]), with the discrete BIC score (`bic-d`). All variables are treated as categorical, and candidate DAG structures are compared according to the Bayesian Information Criterion for discrete Bayesian networks.
 
+    b) __PC__. We use the `PC` implementation of `pgmpy` (cf. [@pgmpyLibrary]) with the original variant (`variant='orig'`), the $\chi^2$ conditional independence test (`ci_test='chi_square'`), and `return_type='dag'`. Since all variables are treated as categorical, conditional independencies are assessed using $\chi^2$ tests rather than the partial-correlation tests commonly used for continuous data[^PC_chi2]. The underlying PC procedure identifies a Markov equivalence class of DAGs, represented by a CPDAG when some edge orientations cannot be determined from the conditional independence relations alone. In our implementation, `return_type='dag'` instructs `pgmpy` to return one fully directed DAG corresponding to one of the possible orientations of the partially directed structure learned by PC[^PC_DAG]. 
 
+    [^PC_chi2]: The choice of the $\chi^2$ test therefore reflects the discrete-data setting of our analysis and should be distinguished from PC implementations based on linear or Gaussian conditional independence tests.
 
-3. __Chronology representation__. Finally, we construct the _maximal causality path_ based on the previous analysis. More precisely, among all causal effects, we retain only those with the highest impact, respecting the topological order of the initial DAG obtained in the first step. By the end of this procedure one obtains a tree (as a sub-DAG of the discovered DAG in the first step) representing the chronology between the maturation events[^causal_DAG].
+    [^PC_DAG]: This DAG is used as the initial graph for the subsequent stages of our pipeline; however, orientations that are not identified by the conditional independence information alone are not interpreted as uniquely determined causal directions.
 
-[^causal_DAG]: This tree reflects, by construction, the _relevant_ (directed) interdependence network between different events. In this sense, it represents the _actual_ causal structure underlying the initial DAG according to the _causal minimality principle_ (cf. [@CausalityBook_Pearl]).
+    c) __LiNGAM__. We use the `ICALiNGAM` implementation provided by `causal-learn` (cf. [@CausalLearnLibrary]). ICA-LiNGAM assumes a linear structural equation model with an acyclic causal structure and mutually independent, non-Gaussian disturbance terms. The method exploits these assumptions to identify the causal structure from observational data through independent component analysis. The method additionally assumes causal sufficiency, i.e., that there are no unobserved common causes of the observed variables. In our analysis, ICA-LiNGAM is applied to the binary event-occurrence data. This application therefore differs from the discrete Bayesian-network formulation used by HC and PC, as the original LiNGAM model is formulated for continuous-valued variables and non-Gaussian disturbances.
 
+    d) __NOTEARS__. We use a NOTEARS-based implementation following Zheng et al. with the logistic loss, which is designed for binary variables. In the NOTEARS framework, the graph structure is represented by a weighted adjacency matrix, and acyclicity is enforced directly during the continuous optimization through a differentiable equality constraint. For binary variables, the conditional distribution can be modeled using logistic regression. In our implementation, the weighted adjacency matrices obtained from NOTEARS are further processed using a stability-selection procedure to identify a sparse and stable set of non-zero edges (cf. [@sec-notears]). The selected non-zero entries are then used to construct the directed adjacency matrix employed in the subsequent stages of our pipeline. Thus, the continuous NOTEARS output is explicitly converted into the sparse directed graph used by our analysis, while preserving the acyclicity constraint of the learned structure.
 
+2. __Causal inference__. The causal discovery step yields directed relations between pairs of events within the learned causal structure; consider, for example, a directed edge $A\rightarrow B$, representing a candidate causal relation within the learned causal structure. The purpose now is to quantify the strength and direction of these relations and to provide a principled criterion for filtering and ranking the candidate causal relations for the subsequent construction of the chronology. To this end, we perform a causal inference analysis, identifying and estimating the relevant causal effect while accounting for potential confounding through appropriate adjustment sets and graphical criteria such as the _backdoor criterion_. Specifically, we estimate the interventional effect of $A$ on $B$.
 
+3. __Chronology representation__. Finally, we construct the _maximal causality paths_ based on the previous analysis. More precisely, among the candidate causal relations identified in the first step, we retain those with the highest estimated causal effects, while respecting the topological order of the initial causal structure. By the end of this procedure one obtains a refinement of the DAG discovered in the first step, yielding an interpretable representation of the chronology between the maturation events.
+
+The causal discovery step and the subsequent causal inference step provide complementary information. The former determines the causal structure and, consequently, a partial ordering of the maturation events, whereas the latter quantifies the strength of the causal relationships within this ordering. The partial order alone does not distinguish between relations that may have substantially different causal effects and therefore does not, by itself, provide a criterion for identifying the most influential chronological links according to our conception of _chronology_ and the paradigm shift underlying our approach (cf. [@rem-chron_causality]). Causal inference therefore allows us to rank and filter the relations identified in the causal discovery step according to their estimated causal effects. The resulting effect-based selection yields a concise chronological backbone that emphasizes the most influential causal links while discarding secondary relations. The resulting structure is thus not intended to replace the partial ordering provided by the initial DAG, but rather to provide a more concise and interpretable representation of its dominant chronological relationships.
+
+Moreover, although the DAG obtained in the causal discovery step provides valuable information about the relative ordering of the events, it may contain a complex network of directed interdependencies that is not sufficiently discriminative for the chronological representation targeted in our framework. In particular, several events may occur at the same topological level, meaning that the DAG does not impose a relative ordering between them. A large number of events concentrated at the same level therefore results in a broad set of events for which no chronological precedence is identified, limiting the interpretability of the resulting chronology (cf. [@rem-chron_causality]). The effect-based selection introduced in the second step addresses this limitation by retaining the most influential causal relationships and thereby producing a more concise chronological structure.
+
+The effect-based selection should therefore be understood as a **heuristic for interpretability** rather than as a supplementary causal-inference step: it does not add causal information beyond the graph of Step 1, it selects and ranks the relations already identified. We evaluate this heuristic explicitly in @sec-ablation-step2, where we compare the pruned chronology with the unpruned Step-1 graph.
 
 # Inferring Causal Maturation Timelines in Arabidopsis thaliana via Bayesian Gene‑Regulation Models {#sec-chloro}
 
 In this section, we apply the full causal inference pipeline described earlier to the post-transcriptional maturation of two chloroplast genes in *Arabidopsis thaliana*: ***ndhB*** and ***ndhD***. These genes provide an ideal testing ground for our methodology: they involve multiple sequential maturation events—such as splicing and editing—captured in binary form from full-length transcriptomic nanopore reads, and exhibit block-structured missing data. Our goal is to infer robust and interpretable causal chronologies of these events, going beyond mere co-occurrence or frequency-based assumptions. Starting from imputed datasets, we learn causal structures using HC, PC, LiNGAM, and NOTEARS, estimate causal effects using do-calculus, and construct timeline DAGs that reflect high-impact, directed causal relationships between maturation events. The NOTEARS algorithm was adapted via a two-level stability selection strategy to enhance robustness in the discovery of causal structures; see Appendix @sec-notears for details.
-
-
 
 ## Imputation through Bayesian network discovery {#sec-imputation}
 
@@ -230,7 +244,6 @@ The ***Graphical model imputation*** method described above converges rapidly. I
 A more principled approach would involve applying a *Belief Propagation* algorithm (cf. [@IntelligentSystemsBook_Pearl], [@LoopyBP]) in step (iv.c) to account for the uncertainty in the imputed parent values. However, our experiments indicate that this variant is significantly slower and does not lead to any substantial refinement of the resulting Bayesian network. In practice, the final graph is effectively the same as the one obtained directly from the initial imputation, without applying any further iterative refinement steps. One potential reason for this behavior is that the *Belief Propagation*-based version of the imputation process imposes, by construction, rigid structural constraints on the DAG, which in turn limits the ability of the EM algorithm to refine the network structure.
 :::
 
-
 In our case study, we focus on datasets that describe the genetic regulation of the *ndhB* and *ndhD* genes located in the chloroplast of *Arabidopsis thaliana*. We provide a brief description of the datasets used and the distribution of missing (`nan`) values.
 
 Maturation events are modeled as binary random variables: $1$ if observed during post-transcriptional maturation, $0$ otherwise. Errors introduced by the nanopore sequencing technology used in @Long_Reads_GuilcherEtAl are treated as unobserved events and assigned a value of $0$ during initial pre-processing—an approach consistent with the binary encoding.
@@ -243,7 +256,6 @@ Maturation events are modeled as binary random variables: $1$ if observed during
 
 ![Distribution of values for *ndhB* before imputation: $\color{blue!75!cyan!75!black}{\blacksquare}$ $=$ value $0$, $\color{blue!30!cyan!70!teal!95!black}{\blacksquare}$ $=$ value $1$, $\color{teal!20!lightgray!95!cyan}{\blacksquare}$ $=$ value `nan`](Figures_NaN_distributions/ndhB_visu_sorted.png){#fig-ndhB_nan_distr fig-pos="H" width=300}
 
-
 ### *ndhD* dataset {.unnumbered .unlisted}
 
 - **No. observations**: $7752$ including $930$ fully observed.
@@ -252,14 +264,11 @@ Maturation events are modeled as binary random variables: $1$ if observed during
 
 ![Distribution of values for *ndhD* before imputation: $\color{blue!75!cyan!75!black}{\blacksquare}$ $=$ value $0$, $\color{blue!30!cyan!70!teal!95!black}{\blacksquare}$ $=$ value $1$, $\color{teal!20!lightgray!95!cyan}{\blacksquare}$ $=$ value `nan`](Figures_NaN_distributions/ndhD_visu_sorted.png){#fig-ndhD_nan_distr fig-pos="H" width=150}
 
+## Construction of a Causal-Chronology {#sec-CausalChronology}
 
+In this section, we detail the implementation of our probabilistic approach applied to the _ndhB_ and _ndhD_ genes of the chloroplast of _Arabidopsis thaliana_ (cf. [@sec-pipeline]).
 
-
-
-
-## Causal inference {#sec-quantitative-causality}
-
-In this section, we detail the implementation of our probabilistic approach applied to the _ndhB_ and _ndhD_ genes of the chloroplast of _Arabidopsis thaliana_.
+### Causal Discovery {#sec-causal_discovery}
 
 The first step in our pipeline is ***Causal discovery***. The graphs in [@fig-CD_ndhB] and [@fig-CD_ndhD] represent the discovered DAGs from the working datasets (i.e. after the imputation process described in [@sec-imputation]), obtained using the HC, PC, LiNGAM, and NOTEARS algorithms. The HC and PC algorithms are implemented via the `pgmpy` Python package (cf. [@pgmpyLibrary]), while LiNGAM is implemented using the `causal-learn` package (cf. [@CausalLearnLibrary]). Implementation details and configuration settings are available at our [GitHub repository](https://github.com/rmartosprieto/chloroDAG.git).
 
@@ -289,10 +298,9 @@ Causal Discovery for _ndhB_
 Causal Discovery for _ndhD_
 :::
 
+### Causal Inference Analysis {#sec-quant_CausalEffects}
 
-### Interventional reasoning {#sec-quant_CausalEffects}
-
-Having identified directed edges through causal discovery, we now turn to the question of whether these edges reflect true causal relationships. To assess this, we apply **interventional reasoning** using the `DoWhy` Python library [@dowhy], which enables us to estimate the **Average Causal Effect (ACE)** of one event on another.
+Having identified directed edges through causal discovery, we next quantify the causal effects associated with these candidate causal relations. To this end, we apply **interventional reasoning** using the `DoWhy` Python library [@dowhy], which enables us to estimate the **Average Causal Effect (ACE)** of one event on another. 
 
 The **ACE** quantifies how much the outcome $Y$ would change on average if we were to intervene and set the treatment variable $X$ to 1 versus 0. Formally, it is defined as
 
@@ -310,19 +318,17 @@ To carry out this analysis, we follow a structured four-step process for each DA
 
 3. **Estimation**. If the effect is identifiable, we estimate the ACE using statistical techniques such as linear regression or matching. When mediators are detected, the estimation is refined to isolate the NDE.
 
-4. **Validation**. Finally, we retain only those causal links for which the estimated ACE is strictly positive, indicating a likely genuine causal influence. When an NDE is used, this value is reported instead. In both cases, the result is recorded in our summary tables under the label _Actual Effect_.
+4. **Filtering**. Finally, we retain candidate causal relations for which the estimated effect is strictly positive (cf. [@def-CausalEffect]). When an NDE is used, this value is reported instead. The resulting retained relations and their corresponding effect estimates are recorded in our summary tables under the label _Estimated Effect_.
 
-Full estimation details are provided in the appendix [@sec-causal_inference_results], specifically in the _Causal relations figures_ ([@fig-CR_ndhB] and [@fig-CR_ndhD]), which present the most relevant causal relationships inferred from each of the previously obtained graphs together with the corresponding _Actual Effect_ value. We refer to the available material at our [GitHub repository](https://github.com/rmartosprieto/chloroDAG.git) for further precisions.
+Full estimation details are provided in the appendix [@sec-causal_inference_results], specifically in the _Causal relations figures_ ([@fig-CR_ndhB] and [@fig-CR_ndhD]), which present the most relevant causal relationships inferred from each of the previously obtained graphs together with the corresponding _Estimated Effect_ value. We refer to the available material at our [GitHub repository](https://github.com/rmartosprieto/chloroDAG.git) for further precisions.
 
+### Chronology Representation
 
+The final step in our pipeline is ***Chronology representation***: we construct the _maximal causality paths_ based on the previous analysis. Among the causal relationships for which an effect has been estimated, we retain only those with the highest impact, in accordance with the topological order of the discovered DAG. The construction of the causal-chronology DAG is carried out in several steps.
 
-### Chronology representation
+i. We sort the rows of the causal inference tables in descending order of _Estimated Effect_.
 
-The final step in our pipeline is ***Chronology representation***: we construct the _maximal causality path_ based on the previous analysis. Among all valid causal relationships estimated previously, we retain only those with the highest impact in accordance with the topological order of the discovered DAG. The construction of the causal-chronology DAG is carried out in several steps.
-
-i. We sort the rows of the causal inference tables in descending order of _Actual Effect_.
-
-ii. Among the possible causes for the same 'Outcome (Y)', we retain only the one with the greatest _Actual Effect_. This yields a collection of _high-impact_ cause-effect arrows, which we refer to as *strong_causal_relations*.
+ii. Among the candidate causes of the same 'Outcome (Y)', we retain only the one with the greatest _Estimated Effect_. This yields a collection of _high-impact_ cause-effect arrows, which we refer to as *strong_causal_relations*.
 
 iii. We compute the topological order of the discovered DAG and determine the level of each node. This is done using the `topological_sorting()` function from the `igraph` Python library (cf. [@igraphLibrary]). The nodes are then grouped by their topological level.
 
@@ -334,9 +340,8 @@ vi. We verify whether all roots of the initial DAG are included in the chronolog
 
 vii. We add all nodes that were already isolated in the initial DAG as well as those that can become isolated after this construction.
 
-
 ::: {#rem-chron_tree}
-Note that this construction implies that the resulting causal-chronology DAG is a (directed) _tree_. Indeed, in this procedure each node has at most one incoming edge (since only the strongest causal link is retained for each outcome) and cycles are prevented by the topological ordering.
+The construction described above has the following structural consequence: the resulting causal-chronology DAG is a directed _tree_ (or, in the presence of disconnected components, a directed forest). Indeed, each node has at most one incoming edge, since only the strongest causal link is retained for each outcome, while cycles are prevented by the topological ordering inherited from the initial DAG. Thus, the tree structure is not an additional assumption imposed on the learned causal structure, nor is it a prerequisite for obtaining the chronology; rather, it is a consequence of the effect-based selection procedure. Although the complete DAG already provides a partial causal ordering, the resulting tree offers a more concise and interpretable representation of the most influential chronological relationships between maturation events.
 :::
 
 The application of this method to the _ndhB_ and _ndhD_ genes of the chloroplast of _Arabidopsis thaliana_ yields the maturation timelines represented in their DAG form in [@fig-Chron_ndhB] and [@fig-Chron_ndhD], respectively.
@@ -367,8 +372,7 @@ Causal models for maturation chronology for _ndhB_
 Causal models for maturation chronology for _ndhD_
 :::
 
-
-
+## Model Selection {#sec-model_selection}
 
 These results naturally raise the question: *which model should be selected for a given gene?*
 
@@ -377,7 +381,6 @@ One approach is to validate each model against both the data and existing expert
 Another complementary strategy is to perform a comparative analysis of the inferred networks across multiple models, aiming to identify **consistently recovered edges**. This consensus-based approach highlights stable relationships—whether directed or undirected—that appear robust to modeling choices. These consensus edges, combined with expert knowledge, can then be used to define a **whitelist** of trusted connections, guiding the construction of a more accurate and interpretable regulatory network.
 
 For example, the cross-analysis of the causal models for *ndhB* ([@fig-Chron_ndhB]) yields the sets of consistently recovered directed and undirected edges represented in [@fig-cross_analysis_ndhB] as a multigraph.
-
 
 ::: {#fig-cross_analysis_ndhB fig-pos="H" layout="[[1,-0.3,1], [1,-0.3,1]]"}
 
@@ -456,7 +459,6 @@ for spine in plt.gca().spines.values():
     spine.set_visible(False)
 plt.tight_layout()
 ```
-
 
 ```{python}
 #| label: fig-cross_analysis_ndhB_undir
@@ -538,9 +540,6 @@ plt.tight_layout()
 Cross-analysis for consistently recovered edges within _ndhB_ causal models
 :::
 
-
-
-
 The cross-analysis of the causal models for *ndhD* ([@fig-Chron_ndhD]) yields the sets of consistently recovered directed and undirected edges represented in [@fig-cross_analysis_ndhD] as a multigraph.
 
 ::: {#fig-cross_analysis_ndhD fig-pos="H" layout="[[1,-0.3,1], [1,-0.3,1]]"}
@@ -619,7 +618,6 @@ for spine in plt.gca().spines.values():
     spine.set_visible(False)
 plt.tight_layout()
 ```
-
 
 ```{python}
 #| label: fig-cross_analysis_ndhD_undir
@@ -703,9 +701,7 @@ plt.tight_layout()
 Cross-analysis for consistently recovered edges within _ndhD_ causal models
 :::
 
-
-
-
+## Results Summary {#sec-results_summary}
 
 ### Comparison with Reference Models
 
@@ -726,12 +722,15 @@ Reference models for maturation chronology
 Note that the reference timeline for *ndhB*, illustrated in [@fig-ref_chrons], does not include the *intron*. This is because we observed that this event has an abnormally large effect on the others. In fact, all graphs we recovered with the deterministic or causal approach were unfalsifiable; removing this event makes them falsifiable. We decided to remove from the analysis which is further justified because, according to [@Long_Reads_GuilcherEtAl], the intron event occurred at the very end of the timeline.
 :::
 
-
 To conduct the comparison, we evaluated both sets of models (causal-chronology vs. reference) using two standard metrics: the Bayesian Information Criterion (BIC) and the Log-Likelihood. The BIC balances model fit with complexity, penalizing overfitting, while the Log-Likelihood measures how well the model explains the observed data.
 
 First, for each model we constructed a `DiscreteBayesianNetwork` using the `pgmpy` library ([@pgmpyLibrary]), and estimated its Conditional Probability Distributions via a `BayesianEstimator`. We then computed `structure_score` (BIC) and `log_likelihood_score` on both the reference and causal-chronology networks. Implementation details and configuration settings are available in our [GitHub repository](https://github.com/rmartosprieto/chloroDAG.git).
 
-The results, compiled in the charts of [@fig-scores], show that at least one causal-chronology model dominates the reference model in both BIC and log-likelihood. Importantly, *ndhB* shows three exceptions: the HC, PC and LiNGAM causal models underperform compared to the reference. Note however that the PC model is close to the reference model. Furthermore, performance differences are observed across causal discovery algorithms. These exceptions and performance variations are mainly due to the dataset size in terms of the number of variables. For instance, NOTEARS achieved better scores than the other methods for *ndhB*, but not for *ndhD*. Conversely, LiNGAM achieved better scores than the other methods for *ndhD*, but not for *ndhB*.
+The results, compiled in the charts of [@fig-scores], are obtained by scoring every model on the same set of maturation events for each gene, namely all the events of the gene, including those left isolated by a given chronology. This guarantees that the comparison is not affected by the number of modelled variables (cf. @rem-scoring). For *ndhD*, all four causal-chronology models dominate the reference model in both BIC and log-likelihood. For *ndhB*, the reference chronology obtains the best score and all four causal models underperform it. Performance differences are also observed across causal discovery algorithms, reflecting their different structural assumptions rather than the existence of a single best method.
+
+::: {#rem-scoring}
+The Bayesian scores (BIC and log-likelihood) compare probabilistic models defined on the same variables. The chronology obtained by a given method may leave some maturation events isolated; these events must nevertheless be included as variables when scoring. Otherwise, models are compared on different variable sets and the one with fewer variables is mechanically favoured. All scores reported here are therefore computed on the full set of events of the gene under study. Scores computed on a restricted variable set are not comparable; in particular, an earlier version of these scores omitted isolated events, which artificially improved the apparent fit of some causal models and changed the ranking for *ndhB*.
+:::
 
 ::: {#fig-scores fig-pos="H" layout="[[1,-0.3,1], [1,-0.3,1]]"}
 
@@ -940,11 +939,6 @@ Bar plots of standard metrics for causal-chronology models and reference models:
 
 A complementary metric used to compare our causal-chronology models to the reference is based on the Bayesian network structure itself, as explained in [@sec-fals_tests]. [@fig-falsification_summaries] summarizes the results of the falsification tests conducted to assess whether the corresponding DAG is accepted or rejected based on its fit with the provided data in terms of conditional independencies. Notably, we observe in [@fig-falsification_summaries] that there are always at least two causal-chronology models that pass the tests with very high performance. As for the reference model, it is rejected for *ndhD* and accepted for *ndhB*.
 
-
-
-
-
-
 ### Reliability of the Proposed Methodology {#sec-Reliability}
 
 To conclude our case study, we assess the **reliability** of the proposed methodology from two complementary perspectives: the stability of the estimated causal effects and the validity of the inferred graph structures.
@@ -957,13 +951,15 @@ These include tests that examine whether effect estimates remain stable under da
 
 All reported causal effects (presented in [@fig-CR_ndhB] and [@fig-CR_ndhD]) for which such analyses could be conducted passed the relevant robustness checks. Full results are available at our [GitHub repository](https://github.com/rmartosprieto/chloroDAG.git).
 
+::: {#rem-robustness}
+These robustness analyses should be distinguished from cross-method agreement: passing a robustness check indicates that an estimated effect is stable under the corresponding perturbations or modelling checks, but does not imply that different causal discovery algorithms must yield identical effect estimates. Given that the algorithms rely on different structural assumptions and may recover different graphs, some degree of variation across the resulting causal models is expected.
+:::
+
 #### Consistency of learned graph structures {#sec-fals_tests}
 
-Beyond individual effects, it is essential to validate the overall graphical models produced during causal discovery. A well-specified DAG should capture the key conditional independencies present in the data, and differ meaningfully from random alternatives.
+Beyond individual effects, it is essential to assess the consistency of the overall graphical models produced during causal discovery. A well-specified DAG should capture the key conditional independencies present in the data and should perform better, with respect to these implied independencies, than randomly permuted alternatives.
 
-To this end, we assess whether each graph implies conditional independence relations that are consistent with the observed data, and whether the graph lies in a narrow equivalence class—indicating a structure that is both specific and informative. These tests collectively provide insight into whether the learned DAG captures more than statistical noise or arbitrary correlations. The results (summarized in [@fig-falsification_summaries]) reveal that there are always at least two causal-chronology models that pass the tests with very high performance.
-
-
+To this end, we assess whether each graph implies conditional independence relations that are consistent with the observed data and whether its conditional-independence structure is sufficiently characteristic to distinguish it from random alternatives. These tests collectively provide insight into whether the learned DAG captures more than statistical noise or arbitrary correlations. The results (summarized in [@fig-falsification_summaries]) reveal that, for both genes, at least two causal-chronology models pass the falsification tests with high performance.
 
 ::: {#fig-falsification_summaries fig-pos="H" layout="[[1,-0.3,1], [1,-0.3,1]]"}
 
@@ -1085,28 +1081,30 @@ ax_fals.legend(handles=legend_elements, title="DAG rejection", title_fontsize=25
 plt.tight_layout()
 ```
 
-Falsification summaries
+Falsification summaries. The y-axis reports the falsification performance, expressed as a percentage, corresponding to the proportion of randomly permuted DAGs for which the original DAG exhibits fewer violations of the LMCs. Higher values therefore indicate that the original DAG satisfies more of its implied conditional independence relations than a larger proportion of the randomly permuted DAGs. The count reported as “No. perm. in MEC” is the number of permuted DAGs that belong to the same MEC as the original DAG.
 ::::
 
+The `DoWhy` library provides validation and falsification tools for assessing the reliability of the learned graph structures. Specifically, we apply the `falsify\_graph()` function to both the reference chronologies (cf. [@fig-ref_chrons]) and the
+causal-chronology models (cf. [@fig-Chron_ndhB] and [@fig-Chron_ndhD]) with respect to the working dataset. The function performs two complementary tests based on conditional independence relations implied by the graph.
+
+First, it evaluates whether the local Markov conditions (LMC for short) implied by the DAG are satisfied in the data. That is, for each node $A_i$ it verifies whether
+$A_i\perp A_j\ |\ \text{Parents($A_i$)}$, as soon as $A_j$ is a non-descendant of $A_i$. The corresponding conditional independence relations are tested in the observed data, and the number of violated LMCs is recorded. The DAG is then randomly permuted at the node level, while preserving the number of nodes and edges, and the same LMC-based test is applied to the resulting permuted DAGs. The resulting falsification performance measures the proportion of randomly permuted DAGs for which the original DAG exhibits fewer violations of its implied local conditional independence relations. In [@fig-falsification_summaries], this quantity is reported on the y-axis as _Performance (%)_. The corresponding Boolean outcome is labeled _falsified_.
+
+Second, `falsify\_graph()` evaluates whether the learned DAG is sufficiently characteristic to be distinguished from random alternatives. Two DAGs belong to the same Markov equivalence class (MEC) when they encode the same set of conditional independence relations. The procedure therefore counts how many of the randomly permuted DAGs belong to the same MEC as the original DAG. This quantity is reported in [@fig-falsification_summaries] as _No. perm. in MEC_. A small number of such permutations indicates that the learned DAG has a sufficiently specific conditional-independence structure to be distinguished from most random alternatives. The corresponding Boolean outcome is labeled _falsifiable_.
 
 ::: {#rem-falsification}
-Among the four possible (_falsifiable_, _falsified_) outcomes:
+The two Boolean outcomes, _falsifiable_ and _falsified_, should be interpreted jointly:
 
-- (T, F): the DAG is likely valid or at least not contradicted by the data.
+- (T, F): the DAG is sufficiently characteristic to be falsifiable, and the falsification test does not reject it.
 
-- (T, T): the DAG is both specific and contradicted, therefore likely incorrect.
+- (T, T): the DAG is sufficiently characteristic to be falsifiable, but is rejected by the falsification test.
 
-- (F, F): inconclusive; the structure may be underdetermined by the data.
+- (F, F): inconclusive; the DAG is not sufficiently characteristic according to the MEC criterion, and is not rejected by the falsification test.
 
-- (F, T): an inconsistent outcome, suggesting possible issues with implementation or test assumptions.
+- (F, T): an inconsistent outcome; the DAG is not sufficiently characteristic according to the MEC criterion, but is rejected by the falsification test.
 
-It is worth noting that some causal structures—such as chains and forks—are probabilistically indistinguishable. Therefore, even when validation tests are passed, expert interpretation remains essential to resolve ambiguities and confirm causal plausibility.
-
-For all these reliability assessments, we leverage the tools available in the `DoWhy` library.
+Importantly, a DAG that is not rejected by the falsification procedure should not be interpreted as being proven correct. Rather, it means that the available data do not provide sufficient evidence to refute the graph under the assumptions and tests used here. Moreover, distinct causal structures can belong to the same Markov equivalence class-such as chains and forks-and therefore be observationally indistinguishable. Consequently, passing the falsification tests does not by itself establish the causal correctness of a DAG, and expert interpretation remains necessary to assess its causal plausibility.
 :::
-
-
-
 
 # Conclusive discussion {#sec-discussion}
 
@@ -1117,30 +1115,23 @@ The methodology proceeds in three stages:
 	2.	Causal inference (estimating the effects of interventions), and
 	3.	Chronology construction (building a causal timeline as a tree-like graphical model).
 
-We applied this pipeline to the post-transcriptional regulation of two chloroplast genes, *ndhB* and *ndhD*, in *Arabidopsis thaliana*, generating four alternative causal-chronology models for each gene. Each model corresponds to a distinct causal discovery algorithm. Compared to the reference chronologies [@Long_Reads_GuilcherEtAl], our causal models systematically achieved better fit for *ndhD*, with NOTEARS standing out for *ndhB*, according to both the Bayesian Information Criterion (BIC) and the log-likelihood. Furthermore, their robustness was assessed through multiple refutation tests—both on individual causal effect estimates and on the overall DAG structure—demonstrating a consistent advantage over the reference models for *ndhD*, while the reference model remains valid for *ndhB*.
+We applied this pipeline to the post-transcriptional regulation of two chloroplast genes, *ndhB* and *ndhD*, in *Arabidopsis thaliana*, generating four alternative causal-chronology models for each gene. Each model corresponds to a distinct causal discovery algorithm. Compared to the reference chronologies [@Long_Reads_GuilcherEtAl], our causal models achieved better fit for *ndhD* according to both the Bayesian Information Criterion (BIC) and the log-likelihood, while the reference chronology remained better for *ndhB* when all models are scored on the same set of events (cf. @rem-scoring). Furthermore, their robustness was assessed through multiple refutation tests—both on individual causal effect estimates and on the overall DAG structure—demonstrating a consistent advantage over the reference models for *ndhD*, while the reference model remains valid for *ndhB*.
 
 We acknowledge that the causal discovery step introduces an element of uncertainty, particularly in the presence of latent confounders or limited data. As discussed in [@rem-falsification], causal structure learning cannot be fully validated from observational data alone. To mitigate this limitation, we complemented standard approaches (HC, PC, LiNGAM) with a continuous optimization-based method: NOTEARS [@DagsNotears]. Because NOTEARS does not prescribe a principled way to set the $\ell_1$-regularization parameter—which governs the sparsity of the learned graph—we proposed a two-level stability selection procedure. This approach was benchmarked using the Sachs et al. dataset and shown to improve structural reliability. While [@DagsNotears] also reports results on this dataset, it provides little insight into parameter tuning or sensitivity.
 
 A key practical challenge stemmed from the presence of numerous missing values in the dataset. Naively restricting the analysis to fully observed reads would have resulted in an unacceptable loss of statistical power. Likewise, truncating the variable space to ensure more complete rows would restrict biological interpretability and risk introducing structural biases. To overcome this, we adopted a two-step imputation strategy. First, we performed initial imputation using IterativeImputer from scikit-learn. Then, a custom graphical model-based EM algorithm iteratively refined the imputation and the DAG structure. Interestingly, the choice of initial imputation method proved to have minimal impact on the final graphical model.
 
-Although our contribution is primarily computational, the proposed framework naturally yields testable hypotheses and experimentally verifiable predictions. The estimated causal effects are analogous to those obtained in randomized controlled trials and can therefore inform laboratory experiment design in a principled way. This opens the door to more sophisticated causal analyses, including counterfactual reasoning and targeted *what if?* questions, thereby enriching the interpretative power of long-read transcriptomic studies. These perspectives are aligned with discussions held with the project leaders of [@Long_Reads_GuilcherEtAl].
+Our contribution lies primarily in an innovative use of causal discovery for a nonstandard purpose, namely, the inference of chronological ordering among post-transcriptional maturation events. Furthermore, the proposed framework naturally yields testable hypotheses and experimentally verifiable predictions. If the assumptions required for causal identification hold, the estimated causal effects can be interpreted as intervention effects and, in this sense, are conceptually related to those that could be estimated in randomized controlled trials. They may therefore provide useful guidance for the design of laboratory experiments. This interpretation is conditional on the validity of the causal model and its underlying assumptions, and should not be taken to imply equivalence between observational estimates and experimental estimates. These effects may also provide a basis for more sophisticated causal analyses, including counterfactual reasoning and targeted *what-if* questions, thereby enriching the interpretative power of long-read transcriptomic studies. These perspectives are aligned with discussions held with the project leaders of [@Long_Reads_GuilcherEtAl].
 
 In summary, we present a principled, flexible, and data-driven framework for exploring gene regulation chronology. By combining causal discovery, statistical inference, and domain expertise, it establishes a foundation for reproducible, hypothesis-driven research in molecular biology.
-
-
 
 # References {.unnumbered}
 
 ::: {#refs}
 :::
 
-
-
-
-
 {{< pagebreak >}}
 # Appendices {.appendix}
-
 
 ## NOTEARS as a causal discovery algorithm {#sec-notears}
 
@@ -1156,11 +1147,46 @@ This approach allowed us to construct a robust DAG by retaining only stable dire
 
 While the resulting graphs were more interpretable and robust, it is worth noting that NOTEARS relies on a linear SEM assumption, and its optimization is non-convex. Therefore, learned graphs should be interpreted as hypotheses supported by data, rather than definitive causal claims. As such, we cross-validated NOTEARS outputs with those of HC, PC, and LiNGAM, and report only consistently supported edges in the final causal timelines.
 
+## Ablation of the causal-inference step (Step 2) {#sec-ablation-step2}
 
+The chronology is obtained from the graph of Step 1 by keeping, for each outcome, the single incoming edge with the largest estimated causal effect. This yields a directed tree (or forest) and discards the relations of lower estimated impact. To assess what this selection contributes, we compare the pruned chronology (Step 2) with the unpruned graph of Step 1 on three quantities: the number of retained edges, the _coverage_ (share of event pairs ordered by the graph through transitive reachability), and the _agreement with the reference chronology_ (share of pairs ordered by the Guilcher chronology that the candidate graph orders consistently). Bayesian scores are computed on the imputed working data, with every model scored on the same set of events (cf. @rem-scoring).
 
+The results are summarised in @tbl-ablation-step2. Pruning systematically reduces the graph (coverage drops on average from $0.65$ to $0.42$) while preserving or improving the agreement with the reference chronology in eleven of the twelve gene/method combinations. However, it does not improve the Bayesian scores: on the full imputed data, the BIC is better for the unpruned Step-1 graph in eight of twelve cases. In other words, the effect-based selection is best interpreted as a **parsimony/interpretability heuristic**: it retains the dominant chronological relations without degrading their agreement with the reference, but it should not be presented as improving the statistical fit of the model. Scripts and full results are available in the `comparisons/ablation/` directory.
+
+```{python}
+#| label: tbl-ablation-step2
+#| echo: false
+#| tbl-cap: "Ablation of the effect-based selection (Step 2). For each gene and method, the unpruned Step-1 graph is compared with the pruned chronology. Lower coverage reflects a more concise graph; higher agreement with the reference chronology indicates a better temporal ordering."
+
+import pandas as pd
+
+_metrics = pd.read_csv("Ablation/ablation_metrics.csv")
+_scores = pd.read_csv("Ablation/ablation_scores_imputed.csv")
+_labels = {"ndhB": "ndhB", "ndhB_with_intron": "ndhB + intron", "ndhD": "ndhD"}
+
+_rows = []
+for _ds in ["ndhB", "ndhB_with_intron", "ndhD"]:
+    for _m in ["HC", "PC", "LiNGAM", "NOTEARS"]:
+        def _row(variant):
+            _a = _metrics[(_metrics.dataset == _ds) & (_metrics.method == _m) & (_metrics.variant == variant)].iloc[0]
+            _s = _scores[(_scores.dataset == _ds) & (_scores.method == _m) & (_scores.variant == variant)].iloc[0]
+            return _a, _s
+        _a1, _s1 = _row("step1_all")
+        _a2, _s2 = _row("step2_chron")
+        _rows.append({
+            "Gene": _labels[_ds],
+            "Method": _m,
+            "Edges (1→2)": f"{int(_a1.n_edges)}→{int(_a2.n_edges)}",
+            "Coverage (1→2)": f"{_a1.coverage:.2f}→{_a2.coverage:.2f}",
+            "Agreement ref. (1→2)": f"{_a1.agreement_ref:.2f}→{_a2.agreement_ref:.2f}",
+            "BIC (1→2)": f"{_s1.BIC:.1f}→{_s2.BIC:.1f}".replace("-", "\u2212"),
+        })
+pd.DataFrame(_rows)
+```
 
 ## Causal inference results {#sec-causal_inference_results}
 
+The causal effects shown in these figures exhibit substantial variability across the different causal discovery methods. This variability is expected because the causal inference stage is performed on the graph identified by each discovery algorithm, so differences in the learned graphical structure and in the corresponding adjustment sets can lead to different estimated effects. The results should therefore not be interpreted as four independent estimates of a single, uniquely identified causal model. Rather, they represent alternative causal-chronology models obtained under different structural-learning assumptions. The robustness of the estimated effects to the corresponding modelling choices is assessed separately in Section [@sec-Reliability], where the effects for which such analyses could be conducted were found to pass the relevant robustness checks.
 
 ::: {#fig-CR_ndhB fig-pos="H" layout="[[1,-0.3,1], [1,-0.3,1]]"}
 
@@ -1231,7 +1257,6 @@ plt.tight_layout()
 plt.show()
 ```
 
-
 ```{python}
 #| echo: false
 #| label: chart-Causality_PC_ndhB
@@ -1299,7 +1324,6 @@ plt.tight_layout()
 plt.show()
 ```
 
-
 ```{python}
 #| echo: false
 #| label: chart-Causality_LiNGAM_ndhB
@@ -1366,7 +1390,6 @@ for x, row_label in enumerate(nodes):
 plt.tight_layout()
 plt.show()
 ```
-
 
 ```{python}
 #| echo: false
@@ -1507,7 +1530,6 @@ plt.tight_layout()
 plt.show()
 ```
 
-
 ```{python}
 #| echo: false
 #| label: chart-Causality_PC_ndhD
@@ -1575,7 +1597,6 @@ plt.tight_layout()
 plt.show()
 ```
 
-
 ```{python}
 #| echo: false
 #| label: chart-Causality_LiNGAM_ndhD
@@ -1642,7 +1663,6 @@ for x, row_label in enumerate(nodes):
 plt.tight_layout()
 plt.show()
 ```
-
 
 ```{python}
 #| echo: false

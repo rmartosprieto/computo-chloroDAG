@@ -50,6 +50,7 @@ template-computo-julia.tex
 *.toc
 
 # Various system files
+.vscode/
 DS_Store
 **/.DS_Store
 /.luarc.json
